@@ -30,4 +30,6 @@ Thumbs.db
 *.tsbuildinfo
 
 # optional
-coverage/
+coverage/ 
+
+#prac
