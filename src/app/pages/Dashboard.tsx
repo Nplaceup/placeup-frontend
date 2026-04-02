@@ -1,8 +1,9 @@
 import { useState } from "react";
 import { useNavigate } from "react-router";
 import { Header } from "../components/Header";
-import { Search, Link as LinkIcon, AlertCircle } from "lucide-react";
-import { apiClient } from "../services/api";
+import { Search, Link as LinkIcon, AlertCircle, FlaskConical } from "lucide-react";
+import { apiClient, ApiError } from "../services/api";
+import { FALLBACK_PLACE_ID } from "../data/MockFallBack";
 
 export function Dashboard() {
   const navigate = useNavigate();
@@ -14,34 +15,39 @@ export function Dashboard() {
     e.preventDefault();
     setError("");
 
-    if (!placeUrl) {
+    if (!placeUrl.trim()) {
       setError("플레이스 URL을 입력해주세요.");
       return;
     }
 
-    // URL 유효성 검증 - 백엔드 개발 완료 후 활성화
-    // if (!placeUrl.includes("place.naver.com")) {
-    //   setError("유효한 네이버 플레이스 URL을 입력해주세요.");
-    //   return;
-    // }
-
     try {
       setIsLoading(true);
-      
-      // API 호출 - 백엔드에서 플레이스 분석 시작
-      const response = await apiClient.startPlaceAnalysis({
-        placeUrl: placeUrl,
-        userId: 'user1', // 실제로는 로그인된 사용자 ID
+
+      const response = await apiClient.registerPlace({
+        naver_url: placeUrl.trim(),
       });
 
-      // 분석 진행 페이지로 이동 (analysisId 또는 placeId 사용)
-      navigate(`/analysis/${response.placeId}`);
-    } catch (err) {
-      console.error('분석 시작 오류:', err);
-      setError("분석을 시작하는 중 오류가 발생했습니다. 다시 시도해주세요.");
+      if (response.status === "existing") {
+        navigate(`/result/${response.place_id}`);
+      } else {
+        navigate(`/analysis/${response.place_id}`, {
+          state: { jobId: response.crawling_job_id },
+        });
+      }
+    } catch {
+      // 백엔드 미연결 시 → 예시 데이터로 분석 진행 시뮬레이션
+      navigate(`/analysis/${FALLBACK_PLACE_ID}`, {
+        state: { fallback: true },
+      });
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleFallbackDemo = () => {
+    navigate(`/analysis/${FALLBACK_PLACE_ID}`, {
+      state: { fallback: true },
+    });
   };
 
   return (
@@ -49,7 +55,6 @@ export function Dashboard() {
       <Header />
 
       <div className="container mx-auto px-4 py-8">
-        {/* 메인 입력 섹션 */}
         <div className="max-w-3xl mx-auto">
           <div className="text-center mb-8">
             <h1 className="text-3xl font-bold text-gray-900 mb-3">
@@ -73,8 +78,9 @@ export function Dashboard() {
                   id="placeUrl"
                   value={placeUrl}
                   onChange={(e) => setPlaceUrl(e.target.value)}
-                  placeholder="https://m.place.naver.com/restaurant/..."
+                  placeholder="https://place.naver.com/restaurant/12345678"
                   className="w-full pl-10 pr-4 py-3 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-green-500 focus:border-transparent"
+                  disabled={isLoading}
                 />
               </div>
               <button
@@ -83,25 +89,41 @@ export function Dashboard() {
                 className="px-8 py-3 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 <Search className="size-5" />
-                {isLoading ? '분석 중...' : '분석 시작'}
+                {isLoading ? "분석 중..." : "분석 시작"}
               </button>
             </div>
+
             {error && (
               <div className="mt-3 flex items-center gap-2 text-red-600 text-sm">
-                <AlertCircle className="size-4" />
+                <AlertCircle className="size-4 flex-shrink-0" />
                 {error}
               </div>
             )}
+
             <p className="mt-3 text-xs text-gray-500">
-              예시: https://m.place.naver.com/restaurant/123456789
+              예시: https://place.naver.com/restaurant/123456789
             </p>
           </form>
+
+          {/* 예시 데이터 테스트 버튼 */}
+          <div className="mt-4 bg-yellow-50 border border-yellow-200 rounded-xl p-4 flex items-center justify-between gap-4">
+            <div className="flex items-center gap-2 text-sm text-yellow-800">
+              <FlaskConical className="size-4 flex-shrink-0" />
+              백엔드 미연결 상태입니다. 예시 데이터로 UI를 테스트할 수 있어요.
+            </div>
+            <button
+              onClick={handleFallbackDemo}
+              className="flex-shrink-0 px-4 py-2 bg-yellow-500 hover:bg-yellow-600 text-white text-sm font-medium rounded-lg transition-colors"
+            >
+              예시 데이터로 보기
+            </button>
+          </div>
         </div>
 
         {/* 사용 가이드 */}
         <div className="max-w-5xl mx-auto mt-16">
           <h2 className="text-2xl font-bold text-center text-gray-900 mb-8">
-            PlaceRank 사용 가이드
+            PlaceUp 사용 가이드
           </h2>
 
           <div className="grid md:grid-cols-3 gap-6">
@@ -131,7 +153,7 @@ export function Dashboard() {
               </div>
               <h3 className="font-semibold mb-2">결과 확인</h3>
               <p className="text-sm text-gray-600">
-                키워드 추천, SEO 점수, 개선 방안을 확인하세요.
+                키워드 추천, 순위, SEO 점수, 개선 방안을 확인하세요.
               </p>
             </div>
           </div>

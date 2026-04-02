@@ -1,466 +1,376 @@
-// API 기본 설정
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080/api';
-const USE_MOCK_DATA = import.meta.env.VITE_USE_MOCK_DATA !== 'false'; // 기본값: true (mock 사용)
+const BASE_URL = "/api/v1";
 
-// API 응답 타입 정의
-export interface PlaceAnalysisRequest {
-  placeUrl: string;
-  userId?: string;
+// ─────────────────────────────────────────
+// 공통 fetch 유틸
+// ─────────────────────────────────────────
+
+async function request<T>(
+  path: string,
+  options?: RequestInit
+): Promise<T> {
+  const res = await fetch(`${BASE_URL}${path}`, {
+    headers: { "Content-Type": "application/json" },
+    ...options,
+  });
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new ApiError(res.status, err?.error?.code, err?.error?.message);
+  }
+
+  return res.json();
 }
 
-export interface PlaceAnalysisResponse {
-  analysisId: string;
-  placeId: string;
-  status: 'pending' | 'processing' | 'completed' | 'failed';
-  estimatedTime?: number; // 예상 소요 시간 (초)
+export class ApiError extends Error {
+  constructor(
+    public status: number,
+    public code?: string,
+    message?: string
+  ) {
+    super(message ?? `API Error ${status}`);
+  }
 }
 
-export interface PlaceInfo {
-  id: string;
-  name: string;
+// ─────────────────────────────────────────
+// 응답 타입 정의
+// ─────────────────────────────────────────
+
+export interface HealthResponse {
+  status: "ok";
+  version: string;
+}
+
+// ② Frame 2 — 플레이스 등록
+export interface RegisterPlaceRequest {
+  naver_url?: string;
+  naver_place_id?: string;
+  force?: boolean;
+}
+
+export interface RegisterPlaceResponse {
+  status: "created" | "existing";
+  place_id: number;
+  place_name: string;
+  crawling_status: "PROCESSING" | "DONE" | "FAILED";
+  // status === "created" 일 때
+  crawling_job_id?: number;
+  // status === "existing" 일 때
+  last_crawled_at?: string;
+}
+
+// ③ Analyzing — 크롤링 진행 상태
+export interface CrawlingStep {
+  key: string;
+  label: string;
+  done: boolean;
+}
+
+export interface CrawlingJobResponse {
+  job_id: number;
+  place_id: number;
+  place_name: string;
+  crawl_date: string;
+  status: "PROCESSING" | "DONE" | "FAILED";
+  progress: number; // 0~100
+  steps: CrawlingStep[];
+  started_at: string;
+  finished_at: string | null;
+}
+
+export interface RetryJobRequest {
+  place_id: number;
+  force?: boolean;
+}
+
+export interface RetryJobResponse {
+  job_id: number;
+  place_id: number;
+  status: "PROCESSING";
+  started_at: string;
+}
+
+// ④ Result — 대시보드
+export interface TopKeywordSummary {
+  keyword: string;
+  my_rank: number | null;
+  seo_score: number;
+  monthly_search: number;
+}
+
+export interface ReviewHighlight {
+  label: string;
+  count: number;
+}
+
+export interface DashboardResponse {
+  place_id: number;
+  place_name: string;
   category: string;
   address: string;
-  phone: string;
-  rating: number;
-  reviewCount: number;
-  images: string[];
-  description: string;
-}
-
-export interface AnalysisResult {
-  placeId: string;
-  placeName: string;
-  seoScore: number;
-  keywords: KeywordRecommendation[];
-  competitors: CompetitorInfo[];
-  seoDetails: {
-    titleScore: number;
-    descriptionScore: number;
-    reviewScore: number;
-    photoScore: number;
-    responseScore: number;
+  analysis_base_date: string;
+  best_rank: { keyword: string; rank_no: number } | null;
+  recommended_keyword_count: number;
+  total_monthly_search: number;
+  seo_score: number | null;
+  seo_grade: string | null;
+  top_keywords: TopKeywordSummary[];
+  review_highlights: ReviewHighlight[];
+  top_voted_keyword: string | null;
+  data_range: {
+    reviews_collected: number;
+    crawl_start: string;
+    crawl_end: string;
   };
-  recommendations: string[];
-  analyzedAt: string;
 }
 
-export interface KeywordRecommendation {
+// ④ Result — 추천 키워드
+export interface RecommendedKeyword {
   keyword: string;
-  score: number;
-  searchVolume: number;
-  competition: 'low' | 'medium' | 'high';
-  currentRank?: number;
-  recommendedRank?: number;
+  seo_score: number;
+  my_rank: number | null;
+  monthly_search: number;
+  source_labels?: string[];
 }
 
-export interface CompetitorInfo {
-  id: string;
-  name: string;
-  rating: number;
-  reviewCount: number;
-  distance: string;
-  rank: number;
-  seoScore: number;
+export interface RecommendedKeywordsResponse {
+  place_id: number;
+  analyzed_at: string;
+  recommended_keywords: {
+    location_industry: RecommendedKeyword[];
+    review_based: RecommendedKeyword[];
+    place_info_based: RecommendedKeyword[];
+  };
 }
 
-export interface KeywordRankingData {
-  keyword: string;
-  currentRank: number;
-  previousRank: number;
-  change: number;
-  searchVolume: number;
-  history: { date: string; rank: number }[];
+// ④ Result — 키워드 순위
+export interface KeywordRanking {
+  keyword_id: number;
+  keyword_name: string;
+  rank_no: number;
+  rank_no_change: number | null;
+  total_score: number;
 }
 
-export interface UserPlace {
-  id: string;
-  name: string;
+export interface PlaceRankingsResponse {
+  place_id: number;
+  place_name: string;
+  crawl_date: string;
+  keyword_rankings: KeywordRanking[];
+}
+
+export interface KeywordRankingEntry {
+  rank_no: number;
+  rank_no_change: number | null;
+  place_id: number;
+  place_name: string;
+  is_my_place: boolean;
+  total_score: number;
+  visitor_review_count: number;
+  blog_review_count: number;
+}
+
+export interface KeywordFullRankingResponse {
+  keyword_id: number;
+  keyword_name: string;
+  crawl_date: string;
+  my_rank: number | null;
+  rankings: KeywordRankingEntry[];
+}
+
+export interface RankingHistoryEntry {
+  crawl_date: string;
+  rank_no: number | null;
+}
+
+export interface RankingHistoryResponse {
+  keyword_id: number;
+  place_id: number;
+  history: RankingHistoryEntry[];
+}
+
+// ④ Result — SEO 점수
+export interface SeoFeedbackItem {
   category: string;
-  address: string;
-  seoScore: number;
-  lastAnalyzed: string;
-  status: 'active' | 'inactive';
+  score: number;
+  max_score: number;
+  grade: "good" | "warning" | "poor";
+  feedback: string;
 }
 
-// API 클라이언트 클래스
-class ApiClient {
-  private async request<T>(
-    endpoint: string,
-    options: RequestInit = {}
-  ): Promise<T> {
-    try {
-      const url = `${API_BASE_URL}${endpoint}`;
-      const response = await fetch(url, {
-        ...options,
-        headers: {
-          'Content-Type': 'application/json',
-          ...options.headers,
-        },
-      });
-
-      if (!response.ok) {
-        throw new Error(`API Error: ${response.status}`);
-      }
-
-      return await response.json();
-    } catch (error) {
-      console.error('API Request Failed:', error);
-      throw error;
-    }
-  }
-
-  // 네이버 OAuth 로그인
-  async naverLogin(code: string): Promise<{ token: string; user: any }> {
-    if (USE_MOCK_DATA) {
-      return this.mockNaverLogin();
-    }
-    return this.request('/auth/naver', {
-      method: 'POST',
-      body: JSON.stringify({ code }),
-    });
-  }
-
-  // 플레이스 분석 시작
-  async startPlaceAnalysis(
-    request: PlaceAnalysisRequest
-  ): Promise<PlaceAnalysisResponse> {
-    if (USE_MOCK_DATA) {
-      return this.mockStartAnalysis(request);
-    }
-    return this.request('/places/analyze', {
-      method: 'POST',
-      body: JSON.stringify(request),
-    });
-  }
-
-  // 분석 상태 확인
-  async getAnalysisStatus(analysisId: string): Promise<PlaceAnalysisResponse> {
-    if (USE_MOCK_DATA) {
-      return this.mockGetAnalysisStatus(analysisId);
-    }
-    return this.request(`/analysis/${analysisId}/status`);
-  }
-
-  // 플레이스 정보 조회
-  async getPlaceInfo(placeId: string): Promise<PlaceInfo> {
-    if (USE_MOCK_DATA) {
-      return this.mockGetPlaceInfo(placeId);
-    }
-    return this.request(`/places/${placeId}`);
-  }
-
-  // 분석 결과 조회
-  async getAnalysisResult(placeId: string): Promise<AnalysisResult> {
-    if (USE_MOCK_DATA) {
-      return this.mockGetAnalysisResult(placeId);
-    }
-    return this.request(`/places/${placeId}/analysis`);
-  }
-
-  // 키워드 순위 조회
-  async getKeywordRankings(placeId: string): Promise<KeywordRankingData[]> {
-    if (USE_MOCK_DATA) {
-      return this.mockGetKeywordRankings(placeId);
-    }
-    return this.request(`/places/${placeId}/keywords/ranking`);
-  }
-
-  // 내 매장 목록 조회
-  async getUserPlaces(userId: string): Promise<UserPlace[]> {
-    if (USE_MOCK_DATA) {
-      return this.mockGetUserPlaces(userId);
-    }
-    return this.request(`/users/${userId}/places`);
-  }
-
-  // 매장 정보 수정
-  async updatePlace(placeId: string, data: Partial<PlaceInfo>): Promise<void> {
-    if (USE_MOCK_DATA) {
-      return this.mockUpdatePlace(placeId, data);
-    }
-    return this.request(`/places/${placeId}`, {
-      method: 'PUT',
-      body: JSON.stringify(data),
-    });
-  }
-
-  // Mock 데이터 메서드들
-  private async mockNaverLogin(): Promise<{ token: string; user: any }> {
-    await this.delay(500);
-    return {
-      token: 'mock-jwt-token-12345',
-      user: {
-        id: 'user1',
-        name: '김플레이스',
-        email: 'user@naver.com',
-        profileImage: '',
-      },
-    };
-  }
-
-  private async mockStartAnalysis(
-    request: PlaceAnalysisRequest
-  ): Promise<PlaceAnalysisResponse> {
-    await this.delay(800);
-    
-    // URL에서 플레이스 ID 추출 시도 (실제로는 백엔드에서 처리)
-    const placeId = request.placeUrl.includes('place1') ? 'place1' : 'place2';
-    
-    return {
-      analysisId: `analysis-${Date.now()}`,
-      placeId: placeId,
-      status: 'processing',
-      estimatedTime: 30,
-    };
-  }
-
-  private async mockGetAnalysisStatus(
-    analysisId: string
-  ): Promise<PlaceAnalysisResponse> {
-    await this.delay(300);
-    return {
-      analysisId,
-      placeId: 'place1',
-      status: 'completed',
-    };
-  }
-
-  private async mockGetPlaceInfo(placeId: string): Promise<PlaceInfo> {
-    await this.delay(500);
-    
-    const mockPlaces: Record<string, PlaceInfo> = {
-      place1: {
-        id: 'place1',
-        name: '강남 맛집 카페',
-        category: '카페',
-        address: '서울시 강남구 테헤란로 123',
-        phone: '02-1234-5678',
-        rating: 4.5,
-        reviewCount: 342,
-        images: [],
-        description: '강남역 근처 분위기 좋은 카페입니다.',
-      },
-      place2: {
-        id: 'place2',
-        name: '이태원 파스타하우스',
-        category: '이탈리안 레스토랑',
-        address: '서울시 용산구 이태원로 456',
-        phone: '02-9876-5432',
-        rating: 4.7,
-        reviewCount: 589,
-        images: [],
-        description: '정통 이탈리안 파스타 전문점',
-      },
-    };
-
-    return mockPlaces[placeId] || mockPlaces.place1;
-  }
-
-  private async mockGetAnalysisResult(placeId: string): Promise<AnalysisResult> {
-    await this.delay(700);
-    
-    const mockResults: Record<string, AnalysisResult> = {
-      place1: {
-        placeId: 'place1',
-        placeName: '강남 맛집 카페',
-        seoScore: 78,
-        keywords: [
-          {
-            keyword: '강남 카페',
-            score: 92,
-            searchVolume: 12500,
-            competition: 'high',
-            currentRank: 15,
-            recommendedRank: 5,
-          },
-          {
-            keyword: '강남역 브런치',
-            score: 85,
-            searchVolume: 8900,
-            competition: 'medium',
-            currentRank: 8,
-            recommendedRank: 3,
-          },
-          {
-            keyword: '테헤란로 디저트',
-            score: 78,
-            searchVolume: 4200,
-            competition: 'low',
-            currentRank: 12,
-            recommendedRank: 5,
-          },
-        ],
-        competitors: [
-          {
-            id: 'comp1',
-            name: '강남 스타벅스',
-            rating: 4.3,
-            reviewCount: 892,
-            distance: '200m',
-            rank: 1,
-            seoScore: 95,
-          },
-          {
-            id: 'comp2',
-            name: '테헤란 커피숍',
-            rating: 4.4,
-            reviewCount: 567,
-            distance: '350m',
-            rank: 2,
-            seoScore: 88,
-          },
-        ],
-        seoDetails: {
-          titleScore: 85,
-          descriptionScore: 75,
-          reviewScore: 82,
-          photoScore: 70,
-          responseScore: 65,
-        },
-        recommendations: [
-          '업체명에 "강남역" 키워드를 추가하세요',
-          '메뉴 설명을 더 상세하게 작성하세요',
-          '리뷰에 적극적으로 답변하세요',
-          '고품질 사진을 10장 이상 등록하세요',
-        ],
-        analyzedAt: new Date().toISOString(),
-      },
-      place2: {
-        placeId: 'place2',
-        placeName: '이태원 파스타하우스',
-        seoScore: 85,
-        keywords: [
-          {
-            keyword: '이태원 파스타',
-            score: 95,
-            searchVolume: 15200,
-            competition: 'medium',
-            currentRank: 3,
-            recommendedRank: 1,
-          },
-          {
-            keyword: '용산 이탈리안',
-            score: 88,
-            searchVolume: 7800,
-            competition: 'low',
-            currentRank: 5,
-            recommendedRank: 2,
-          },
-        ],
-        competitors: [
-          {
-            id: 'comp3',
-            name: '이태원 파스타킹',
-            rating: 4.6,
-            reviewCount: 723,
-            distance: '300m',
-            rank: 1,
-            seoScore: 92,
-          },
-        ],
-        seoDetails: {
-          titleScore: 90,
-          descriptionScore: 85,
-          reviewScore: 88,
-          photoScore: 80,
-          responseScore: 78,
-        },
-        recommendations: [
-          '시그니처 메뉴 사진을 추가하세요',
-          '영업시간을 정확하게 업데이트하세요',
-        ],
-        analyzedAt: new Date().toISOString(),
-      },
-    };
-
-    return mockResults[placeId] || mockResults.place1;
-  }
-
-  private async mockGetKeywordRankings(
-    placeId: string
-  ): Promise<KeywordRankingData[]> {
-    await this.delay(600);
-    
-    return [
-      {
-        keyword: '강남 카페',
-        currentRank: 15,
-        previousRank: 18,
-        change: 3,
-        searchVolume: 12500,
-        history: [
-          { date: '2026-03-01', rank: 20 },
-          { date: '2026-03-08', rank: 18 },
-          { date: '2026-03-15', rank: 16 },
-          { date: '2026-03-22', rank: 15 },
-        ],
-      },
-      {
-        keyword: '강남역 브런치',
-        currentRank: 8,
-        previousRank: 12,
-        change: 4,
-        searchVolume: 8900,
-        history: [
-          { date: '2026-03-01', rank: 15 },
-          { date: '2026-03-08', rank: 12 },
-          { date: '2026-03-15', rank: 10 },
-          { date: '2026-03-22', rank: 8 },
-        ],
-      },
-      {
-        keyword: '테헤란로 디저트',
-        currentRank: 12,
-        previousRank: 11,
-        change: -1,
-        searchVolume: 4200,
-        history: [
-          { date: '2026-03-01', rank: 10 },
-          { date: '2026-03-08', rank: 11 },
-          { date: '2026-03-15', rank: 11 },
-          { date: '2026-03-22', rank: 12 },
-        ],
-      },
-    ];
-  }
-
-  private async mockGetUserPlaces(userId: string): Promise<UserPlace[]> {
-    await this.delay(500);
-    
-    return [
-      {
-        id: 'place1',
-        name: '강남 맛집 카페',
-        category: '카페',
-        address: '서울시 강남구 테헤란로 123',
-        seoScore: 78,
-        lastAnalyzed: '2026-03-28T10:30:00Z',
-        status: 'active',
-      },
-      {
-        id: 'place2',
-        name: '이태원 파스타하우스',
-        category: '이탈리안',
-        address: '서울시 용산구 이태원로 456',
-        seoScore: 85,
-        lastAnalyzed: '2026-03-27T15:20:00Z',
-        status: 'active',
-      },
-    ];
-  }
-
-  private async mockUpdatePlace(
-    placeId: string,
-    data: Partial<PlaceInfo>
-  ): Promise<void> {
-    await this.delay(400);
-    console.log('Mock: Place updated', placeId, data);
-  }
-
-  private delay(ms: number): Promise<void> {
-    return new Promise((resolve) => setTimeout(resolve, ms));
-  }
+export interface SeoScoreResponse {
+  place_id: number;
+  total_score: number;
+  grade: string;
+  analyzed_at: string;
+  breakdown: SeoFeedbackItem[];
 }
 
-// API 클라이언트 싱글톤 인스턴스
-export const apiClient = new ApiClient();
+// ④ Result — 리뷰 분석
+export interface ReviewAnalysisResponse {
+  place_id: number;
+  crawl_date: string;
+  themes: { label: string; count: number }[];
+  menus: { label: string; count: number }[];
+  voted_keywords: { code: string; display_name: string; count: number }[];
+}
+
+export interface ReviewsResponse {
+  total: number;
+  page: number;
+  size: number;
+  data: { id: number; body: string; visited: string; created_at: string }[];
+}
+
+// ④ Result — 검색량
+export interface SearchVolumeEntry {
+  keyword_id: number;
+  keyword_name: string;
+  monthly_avg: number;
+  volumes: { month: string; pc: number; mobile: number; total: number }[];
+}
+
+export interface SearchVolumesResponse {
+  data: SearchVolumeEntry[];
+}
+
+export interface RelatedKeywordsResponse {
+  keyword_id: number;
+  keyword_name: string;
+  related: { keyword: string; monthly_search: number }[];
+}
+
+// ─────────────────────────────────────────
+// API 클라이언트
+// ─────────────────────────────────────────
+
+export const apiClient = {
+
+  // 서버 상태 확인 (선택적)
+  health(): Promise<HealthResponse> {
+    return request("/health");
+  },
+
+  // ② Frame 2 — 분석 시작
+  registerPlace(body: RegisterPlaceRequest): Promise<RegisterPlaceResponse> {
+    return request("/places/register", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  },
+
+  // ③ Analyzing — 진행 상태 폴링
+  getCrawlingJob(jobId: number): Promise<CrawlingJobResponse> {
+    return request(`/crawling/jobs/${jobId}`);
+  },
+
+  retryCrawlingJob(body: RetryJobRequest): Promise<RetryJobResponse> {
+    return request("/crawling/jobs", {
+      method: "POST",
+      body: JSON.stringify(body),
+    });
+  },
+
+  // ④ Result — 대시보드 (최초 1회 통합 호출)
+  getDashboard(placeId: number): Promise<DashboardResponse> {
+    return request(`/places/${placeId}/dashboard`);
+  },
+
+  // ④ Result — 추천 키워드
+  getRecommendedKeywords(
+    placeId: number,
+    params?: { limit?: number; min_seo_score?: number }
+  ): Promise<RecommendedKeywordsResponse> {
+    const qs = new URLSearchParams(
+      Object.entries(params ?? {})
+        .filter(([, v]) => v !== undefined)
+        .map(([k, v]) => [k, String(v)])
+    ).toString();
+    return request(`/places/${placeId}/recommended-keywords${qs ? `?${qs}` : ""}`);
+  },
+
+  // ④ Result — 내 플레이스의 키워드별 순위
+  getPlaceRankings(
+    placeId: number,
+    crawlDate?: string
+  ): Promise<PlaceRankingsResponse> {
+    const qs = new URLSearchParams({ place_id: String(placeId), ...(crawlDate ? { crawl_date: crawlDate } : {}) }).toString();
+    return request(`/rankings/place?${qs}`);
+  },
+
+  // ④ Result — 키워드 클릭 시 전체 순위
+  getKeywordFullRanking(params: {
+    keyword_id: number;
+    highlight_place_id?: number;
+    top?: number;
+    crawl_date?: string;
+  }): Promise<KeywordFullRankingResponse> {
+    const qs = new URLSearchParams(
+      Object.entries(params)
+        .filter(([, v]) => v !== undefined)
+        .map(([k, v]) => [k, String(v)])
+    ).toString();
+    return request(`/rankings/keyword?${qs}`);
+  },
+
+  // ④ Result — 순위 변동 이력 (차트용)
+  getRankingHistory(params: {
+    keyword_id: number;
+    place_id: number;
+    days?: number;
+  }): Promise<RankingHistoryResponse> {
+    const qs = new URLSearchParams(
+      Object.entries(params)
+        .filter(([, v]) => v !== undefined)
+        .map(([k, v]) => [k, String(v)])
+    ).toString();
+    return request(`/rankings/history?${qs}`);
+  },
+
+  // ④ Result — SEO 점수 상세
+  getSeoScore(placeId: number): Promise<SeoScoreResponse> {
+    return request(`/places/${placeId}/seo-score`);
+  },
+
+  // ④ Result — 리뷰 분석 통계
+  getReviewAnalysis(placeId: number, crawlDate?: string): Promise<ReviewAnalysisResponse> {
+    const qs = crawlDate ? `?crawl_date=${crawlDate}` : "";
+    return request(`/places/${placeId}/review-analysis${qs}`);
+  },
+
+  // ④ Result — 원본 리뷰 목록
+  getReviews(
+    placeId: number,
+    params?: { page?: number; size?: number; sort?: "latest" | "oldest" }
+  ): Promise<ReviewsResponse> {
+    const qs = new URLSearchParams(
+      Object.entries(params ?? {})
+        .filter(([, v]) => v !== undefined)
+        .map(([k, v]) => [k, String(v)])
+    ).toString();
+    return request(`/places/${placeId}/reviews${qs ? `?${qs}` : ""}`);
+  },
+
+  // ④ Result — 키워드 월간 검색량
+  getSearchVolumes(
+    keywordIds: number[],
+    period?: "3m" | "6m" | "12m"
+  ): Promise<SearchVolumesResponse> {
+    const qs = new URLSearchParams({
+      keyword_ids: keywordIds.join(","),
+      ...(period ? { period } : {}),
+    }).toString();
+    return request(`/search-volumes?${qs}`);
+  },
+
+  // ④ Result — 연관 검색어
+  getRelatedKeywords(
+    keywordId: number,
+    limit?: number
+  ): Promise<RelatedKeywordsResponse> {
+    const qs = new URLSearchParams({
+      keyword_id: String(keywordId),
+      ...(limit ? { limit: String(limit) } : {}),
+    }).toString();
+    return request(`/search-volumes/related?${qs}`);
+  },
+};
