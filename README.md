@@ -21,9 +21,6 @@ src/
 ├── app/
 │   ├── components/
 │   │   ├── Header.tsx              # 공통 헤더 (로고 + 네비게이션)
-│   │   ├── figma/
-│   │   │   └── ImageWithFallback.tsx  # 이미지 로딩 실패 시 대체 표시
-│   │   └── ui/                     # shadcn/ui 기반 공통 컴포넌트 48개
 │   ├── data/
 │   │   └── MockFallBack.ts         # 백엔드 미연결 시 사용하는 예시 데이터
 │   ├── pages/
