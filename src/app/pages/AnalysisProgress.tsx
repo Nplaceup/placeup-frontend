@@ -99,7 +99,7 @@ export function AnalysisProgress() {
       runPolling(jobId);
     } else {
       // jobId도 없고 fallback도 아닌 경우 → 결과 페이지로
-      navigate(`/result/${placeId}`, { replace: true });
+      // navigate(`/result/${placeId}`, { replace: true });
     }
 
     return () => stopPolling();

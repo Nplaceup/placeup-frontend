@@ -27,10 +27,11 @@ export function Dashboard() {
 
       const response = await analysisApi.getPlaceAnalysis(placeUrl.trim());
 
+      
       if (response.data.analyzing) {
-        navigate(`/result/${response.data.naverPlaceId}`);
-      } else {
         navigate(`/analysis/${response.data.naverPlaceId}`);
+      } else {
+        navigate(`/result/${response.data.naverPlaceId}`);
       }
     } catch (error) {
       const errMsg = '분석 요청 중 오류가 발생했습니다. 다시 시도해주세요.';
