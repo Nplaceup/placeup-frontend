@@ -1,4 +1,3 @@
-//progress
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams, useLocation } from 'react-router';
 import { Header } from '../components/Header';
