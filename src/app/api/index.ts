@@ -7,7 +7,6 @@ function createApi(headers: Record<string, string>) {
   const instance = axios.create({
     baseURL: API_SERVER_URL,
     headers,
-    withCredentials: true,
   });
 
   return instance;
