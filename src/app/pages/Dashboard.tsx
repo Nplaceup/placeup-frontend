@@ -29,7 +29,9 @@ export function Dashboard() {
 
       
       if (response.data.analyzing) {
-        navigate(`/analysis/${response.data.naverPlaceId}`);
+        navigate(`/analysis/${response.data.naverPlaceId}`, {
+  state: { placeName: response.data.placeName, placeUrl: placeUrl.trim() },
+});
       } else {
         navigate(`/result/${response.data.naverPlaceId}`);
       }
