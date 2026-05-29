@@ -6,7 +6,7 @@ import { analysisApi } from '../api/analysis';
 import axios, { AxiosError } from 'axios';
 
 const POLL_INTERVAL_MS = 5000;
-const STEP_INTERVAL_MS = 2000; // 단계 하나 진행하는 데 걸리는 시간
+const STEP_INTERVAL_MS = 2000;
 
 const STEPS = [
   { label: '플레이스 정보 수집' },
@@ -23,7 +23,6 @@ export function AnalysisProgress() {
   const placeName: string = location.state?.placeName ?? '매장';
   const placeUrl: string = location.state?.placeUrl ?? '';
 
-  // currentStep: 0~3 진행 중인 단계 인덱스, 4 = 전부 완료(100%)
   const [currentStep, setCurrentStep] = useState(0);
   const [isAnalysisDone, setIsAnalysisDone] = useState(false);
   const [status, setStatus] = useState<'PROCESSING' | 'FAILED'>('PROCESSING');
@@ -31,16 +30,19 @@ export function AnalysisProgress() {
 
   const stepTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const canNavigateRef = useRef(false); // 100% 완료 여부
-  const analysisDoneRef = useRef(false); // API 응답 완료 여부
+  const canNavigateRef = useRef(false);   // 100% 완료 여부
+  const analysisDoneRef = useRef(false);  // API 완료 여부
+  const navigatedRef = useRef(false);     // 중복 이동 방지
 
   const stopAll = () => {
     if (stepTimerRef.current) { clearInterval(stepTimerRef.current); stepTimerRef.current = null; }
     if (pollTimerRef.current) { clearInterval(pollTimerRef.current); pollTimerRef.current = null; }
   };
 
+  // 둘 다 완료됐을 때만 이동 — ref로 최신값 참조
   const tryNavigate = () => {
-    if (canNavigateRef.current && analysisDoneRef.current) {
+    if (canNavigateRef.current && analysisDoneRef.current && !navigatedRef.current) {
+      navigatedRef.current = true;
       stopAll();
       navigate(`/result/${placeId}`);
     }
@@ -52,7 +54,6 @@ export function AnalysisProgress() {
       setCurrentStep((prev) => {
         const next = prev + 1;
         if (next >= STEPS.length) {
-          // 마지막 단계 완료 → 100%
           if (stepTimerRef.current) { clearInterval(stepTimerRef.current); stepTimerRef.current = null; }
           canNavigateRef.current = true;
           tryNavigate();
@@ -65,6 +66,13 @@ export function AnalysisProgress() {
 
   // ── API 폴링 ──
   const startPolling = () => {
+    if (!placeUrl) {
+      // placeUrl이 없으면 폴링 불가 — 에러 처리
+      setStatus('FAILED');
+      setError('URL 정보가 없습니다. 처음부터 다시 시도해주세요.');
+      return;
+    }
+
     const poll = async () => {
       try {
         const response = await analysisApi.getPlaceAnalysis(placeUrl);
@@ -105,6 +113,7 @@ export function AnalysisProgress() {
     setStatus('PROCESSING');
     canNavigateRef.current = false;
     analysisDoneRef.current = false;
+    navigatedRef.current = false;
     startStepAnimation();
     startPolling();
   };
@@ -141,7 +150,6 @@ export function AnalysisProgress() {
 
           {/* 진행률 + 단계 */}
           <div className='bg-white rounded-xl shadow-lg p-8 mb-6'>
-            {/* Progress bar */}
             <div className='mb-6'>
               <div className='flex justify-between items-center mb-2'>
                 <span className='text-sm font-medium text-gray-700'>전체 진행률</span>
@@ -155,7 +163,6 @@ export function AnalysisProgress() {
               </div>
             </div>
 
-            {/* 단계 목록 */}
             <div className='space-y-3'>
               {STEPS.map((step, i) => {
                 const isDone = i < currentStep;
