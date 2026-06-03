@@ -44,10 +44,13 @@ export function AnalysisProgress() {
   const [error, setError] = useState('');
 
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const navigatedRef = useRef(false); // 중복 이동 방지
+  const navigatedRef = useRef(false);
 
   const stopPolling = () => {
-    if (pollTimerRef.current) { clearInterval(pollTimerRef.current); pollTimerRef.current = null; }
+    if (pollTimerRef.current) {
+      clearInterval(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
   };
 
   // ── API 폴링 ──────────────────────────────────────────────────
@@ -57,25 +60,28 @@ export function AnalysisProgress() {
     const poll = async () => {
       try {
         const response = await analysisApi.getAnalysisStatus(Number(placeId));
-        const { analyzing, status } = response.data;
+        const { status } = response.data;
 
-        // status로 현재 단계 업데이트
-        const step = STATUS_TO_STEP[status] ?? 0;
+        // status 기준으로 단계 업데이트 (null 방어 처리)
+        const step = status ? (STATUS_TO_STEP[status] ?? 0) : 0;
         setCurrentStep(step);
 
-        // 분석 완료 → 결과 페이지 이동
-        if (!analyzing && !navigatedRef.current) {
+        // COMPLETED — 결과 페이지 이동
+        if (status === 'COMPLETED' && !navigatedRef.current) {
           navigatedRef.current = true;
           stopPolling();
           navigate(`/result/${placeId}`);
+          return;
         }
 
-        // 분석 실패
+        // FAILED — 에러 표시, 폴링 중단
         if (status === 'FAILED') {
           stopPolling();
           setPageStatus('FAILED');
           setError('분석 중 오류가 발생했습니다. 다시 시도해주세요.');
+          return;
         }
+
       } catch (err) {
         stopPolling();
         setPageStatus('FAILED');

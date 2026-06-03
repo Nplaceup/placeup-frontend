@@ -31,7 +31,15 @@ export function AnalysisResult() {
         setIsLoading(true);
         // GET /v1/place-analysis?naverPlaceId={placeId}
         const response = await analysisApi.getAnalysisStatus(Number(placeId));
-        setData(response.data);
+        const result = response.data;
+
+        // 아직 분석 중이면 진행 페이지로 되돌아감
+        if (result.analyzing || result.status !== 'COMPLETED') {
+          navigate(`/analysis/${placeId}`, { replace: true });
+          return;
+        }
+
+        setData(result);
       } catch (err) {
         const errMsg = '데이터를 불러오는 중 오류가 발생했습니다.';
         if (axios.isAxiosError(err)) {
@@ -247,7 +255,6 @@ export function AnalysisResult() {
                 </BarChart>
               </ResponsiveContainer>
             </div>
-
           </div>
         </div>
 
@@ -301,7 +308,6 @@ export function AnalysisResult() {
                   </RadarChart>
                 </ResponsiveContainer>
               </div>
-
             </div>
           </div>
         )}
