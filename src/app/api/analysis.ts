@@ -25,4 +25,4 @@ export const analysisApi = {
 
     return response.data;
   },
-};
+}; //
