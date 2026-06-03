@@ -8,7 +8,41 @@ import {
 } from 'recharts';
 import axios, { AxiosError } from 'axios';
 import { analysisApi } from '../api/analysis';
-import { AnalysisResponse } from '../api/type';
+
+// ── 타입 ──────────────────────────────────────────────────────────
+
+type Keyword = {
+  keyword: string;
+  score: number;               // 0~1
+  monthlySearchVolume: number;
+  rankNo: number | null;       // 순위 없으면 null
+  competitionLevel: '높음' | '중간' | '낮음';
+  isOpportunity: boolean;
+};
+
+type SeoScore = {
+  score: number;               // 총점 0~100
+  grade: string;               // 예: "🟠 미흡"
+  keywordOptimization: number; // 0~40
+  reviewQuality: number;       // 0~30
+  searchExposure: number;      // 0~20
+  competition: number;         // 0~10
+};
+
+type Feedback = {
+  summary: string;
+  seoFeedback: string[];       // 최대 3개
+  reviewFeedback: string[];    // 최대 3개, 없으면 빈 배열
+};
+
+type AnalysisData = {
+  naverPlaceId: number;
+  placeName: string;
+  analyzing: boolean;
+  keywords: Keyword[];         // 분석 중이면 빈 배열
+  seo: SeoScore | null;        // 분석 중이면 null
+  feedback: Feedback | null;   // 분석 중이면 null
+};
 
 // ── 컴포넌트 ──────────────────────────────────────────────────────
 
@@ -16,7 +50,7 @@ export function AnalysisResult() {
   const { placeId } = useParams();
   const navigate = useNavigate();
 
-  const [data, setData] = useState<AnalysisResponse | null>(null);
+  const [data, setData] = useState<AnalysisData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -29,17 +63,9 @@ export function AnalysisResult() {
     const load = async () => {
       try {
         setIsLoading(true);
-        // GET /v1/place-analysis?naverPlaceId={placeId}
-        const response = await analysisApi.getAnalysisStatus(Number(placeId));
-        const result = response.data;
-
-        // 아직 분석 중이면 진행 페이지로 되돌아감
-        if (result.analyzing || result.status !== 'COMPLETED') {
-          navigate(`/analysis/${placeId}`, { replace: true });
-          return;
-        }
-
-        setData(result);
+        // GET /v1/openapi/analysis?naverPlaceId={placeId}
+        const response = await analysisApi.getAnalysis(Number(placeId));
+        setData(response.data);
       } catch (err) {
         const errMsg = '데이터를 불러오는 중 오류가 발생했습니다.';
         if (axios.isAxiosError(err)) {
@@ -216,19 +242,30 @@ export function AnalysisResult() {
                     className='grid items-center gap-3 px-3 py-2.5 bg-gray-50 rounded-lg'
                     style={{ gridTemplateColumns: '28px 1fr auto auto auto auto' }}
                   >
+                    {/* 순번 */}
                     <div className='size-7 bg-green-100 rounded-full flex items-center justify-center text-xs font-medium text-green-800'>
                       {index + 1}
                     </div>
+
+                    {/* 키워드명 */}
                     <span className='text-sm font-medium text-gray-900 truncate'>{kw.keyword}</span>
+
+                    {/* 검색량 */}
                     <span className='text-xs text-gray-400 whitespace-nowrap'>
                       {kw.monthlySearchVolume > 0 ? kw.monthlySearchVolume.toLocaleString() : '0'}
                     </span>
+
+                    {/* 순위 */}
                     <span className='text-xs text-gray-400 whitespace-nowrap'>
                       {kw.rankNo !== null ? `${kw.rankNo}위` : '—'}
                     </span>
+
+                    {/* 경쟁도 배지 */}
                     <span className={`text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${competitionStyle[kw.competitionLevel]}`}>
                       경쟁 {kw.competitionLevel}
                     </span>
+
+                    {/* 기회 배지 */}
                     {kw.isOpportunity
                       ? <span className='text-xs px-2 py-0.5 bg-blue-100 text-blue-800 rounded-full font-medium whitespace-nowrap'>기회</span>
                       : <span />
@@ -255,6 +292,7 @@ export function AnalysisResult() {
                 </BarChart>
               </ResponsiveContainer>
             </div>
+
           </div>
         </div>
 
@@ -273,12 +311,16 @@ export function AnalysisResult() {
                     <span className='text-sm text-gray-400'>{seo.grade}</span>
                   </div>
                 </div>
+
+                {/* 총점 바 */}
                 <div className='w-full bg-gray-100 rounded-full h-2.5 mb-6'>
                   <div
                     className='h-2.5 rounded-full bg-yellow-400 transition-all'
                     style={{ width: `${seo.score}%` }}
                   />
                 </div>
+
+                {/* 세부 항목 */}
                 <div className='space-y-4'>
                   {radarData.map((item) => (
                     <div key={item.category}>
@@ -308,6 +350,7 @@ export function AnalysisResult() {
                   </RadarChart>
                 </ResponsiveContainer>
               </div>
+
             </div>
           </div>
         )}

@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router';
 import { Header } from '../components/Header';
-import { Search, Link as LinkIcon, AlertCircle } from 'lucide-react';
+import { Search, Link as LinkIcon, AlertCircle, FlaskConical } from 'lucide-react';
 import { analysisApi } from '../api/analysis';
 import axios, { AxiosError } from 'axios';
 
@@ -15,30 +15,35 @@ export function Dashboard() {
     e.preventDefault();
     setError('');
 
+    // 유효성 검사
     if (!placeUrl.trim()) {
       setError('플레이스 URL을 입력해주세요.');
       return;
     }
 
+    // api 호출
     try {
       setIsLoading(true);
 
-      // POST /v1/place-analysis — 분석 트리거
-      const response = await analysisApi.triggerAnalysis(placeUrl.trim());
-      const { naverPlaceId, placeName, analyzing } = response.data;
+      const response = await analysisApi.getPlaceAnalysis(placeUrl.trim());
 
-      if (analyzing) {
-        navigate(`/analysis/${naverPlaceId}`, {
-          state: { placeName, placeUrl: placeUrl.trim() },
-        });
+      
+      if (response.data.analyzing) {
+        navigate(`/analysis/${response.data.naverPlaceId}`, {
+  state: { placeName: response.data.placeName, placeUrl: placeUrl.trim() },
+});
       } else {
-        navigate(`/result/${naverPlaceId}`);
+        navigate(`/result/${response.data.naverPlaceId}`);
       }
     } catch (error) {
       const errMsg = '분석 요청 중 오류가 발생했습니다. 다시 시도해주세요.';
 
       if (axios.isAxiosError(error)) {
-        const axiosErr = error as AxiosError<{ code: number; message: string }>;
+        const axiosErr = error as AxiosError<{
+          code: number;
+          message: string;
+        }>;
+
         setError(axiosErr.response?.data?.message || errMsg);
       } else {
         setError(errMsg);
