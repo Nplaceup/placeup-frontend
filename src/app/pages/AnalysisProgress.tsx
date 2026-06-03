@@ -3,10 +3,27 @@ import { useNavigate, useParams, useLocation } from 'react-router';
 import { Header } from '../components/Header';
 import { Loader2, XCircle, CheckCircle2 } from 'lucide-react';
 import { analysisApi } from '../api/analysis';
+import { AnalysisStatus } from '../api/type';
 import axios, { AxiosError } from 'axios';
 
 const POLL_INTERVAL_MS = 5000;
-const STEP_INTERVAL_MS = 2000;
+
+// ── status → 단계 인덱스 매핑 ──────────────────────────────────
+// 0: 플레이스 정보 수집
+// 1: 리뷰 데이터 수집
+// 2: 키워드 분석
+// 3: 순위 데이터 수집
+const STATUS_TO_STEP: Record<AnalysisStatus, number> = {
+  REQUESTED:               0,
+  PLACE_CRAWLING:          0,
+  REVIEW_CRAWLING:         1,
+  KEYWORD_EXTRACTING:      2,
+  RANKING_CRAWLING:        3,
+  SEARCH_VOLUME_CRAWLING:  3,
+  SEO_ANALYZING:           3,
+  COMPLETED:               4,
+  FAILED:                  4,
+};
 
 const STEPS = [
   { label: '플레이스 정보 수집' },
@@ -21,70 +38,53 @@ export function AnalysisProgress() {
   const location = useLocation();
 
   const placeName: string = location.state?.placeName ?? '매장';
-  const placeUrl: string = location.state?.placeUrl ?? '';
 
   const [currentStep, setCurrentStep] = useState(0);
-  const [isAnalysisDone, setIsAnalysisDone] = useState(false);
-  const [status, setStatus] = useState<'PROCESSING' | 'FAILED'>('PROCESSING');
+  const [pageStatus, setPageStatus] = useState<'PROCESSING' | 'FAILED'>('PROCESSING');
   const [error, setError] = useState('');
 
-  const stepTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
   const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const canNavigateRef = useRef(false);   // 100% 완료 여부
-  const analysisDoneRef = useRef(false);  // API 완료 여부
-  const navigatedRef = useRef(false);     // 중복 이동 방지
+  const navigatedRef = useRef(false);
 
-  const stopAll = () => {
-    if (stepTimerRef.current) { clearInterval(stepTimerRef.current); stepTimerRef.current = null; }
-    if (pollTimerRef.current) { clearInterval(pollTimerRef.current); pollTimerRef.current = null; }
-  };
-
-  // 둘 다 완료됐을 때만 이동 — ref로 최신값 참조
-  const tryNavigate = () => {
-    if (canNavigateRef.current && analysisDoneRef.current && !navigatedRef.current) {
-      navigatedRef.current = true;
-      stopAll();
-      navigate(`/result/${placeId}`);
+  const stopPolling = () => {
+    if (pollTimerRef.current) {
+      clearInterval(pollTimerRef.current);
+      pollTimerRef.current = null;
     }
   };
 
-  // ── 단계 애니메이션 ──
-  const startStepAnimation = () => {
-    stepTimerRef.current = setInterval(() => {
-      setCurrentStep((prev) => {
-        const next = prev + 1;
-        if (next >= STEPS.length) {
-          if (stepTimerRef.current) { clearInterval(stepTimerRef.current); stepTimerRef.current = null; }
-          canNavigateRef.current = true;
-          tryNavigate();
-          return next;
-        }
-        return next;
-      });
-    }, STEP_INTERVAL_MS);
-  };
-
-  // ── API 폴링 ──
+  // ── API 폴링 ──────────────────────────────────────────────────
   const startPolling = () => {
-    if (!placeUrl) {
-      // placeUrl이 없으면 폴링 불가 — 에러 처리
-      setStatus('FAILED');
-      setError('URL 정보가 없습니다. 처음부터 다시 시도해주세요.');
-      return;
-    }
+    if (!placeId) return;
 
     const poll = async () => {
       try {
-        const response = await analysisApi.getPlaceAnalysis(placeUrl);
-        if (!response.data.analyzing) {
-          analysisDoneRef.current = true;
-          setIsAnalysisDone(true);
-          if (pollTimerRef.current) { clearInterval(pollTimerRef.current); pollTimerRef.current = null; }
-          tryNavigate();
+        const response = await analysisApi.getAnalysisStatus(Number(placeId));
+        const { status } = response.data;
+
+        // status 기준으로 단계 업데이트 (null 방어 처리)
+        const step = status ? (STATUS_TO_STEP[status] ?? 0) : 0;
+        setCurrentStep(step);
+
+        // COMPLETED — 결과 페이지 이동
+        if (status === 'COMPLETED' && !navigatedRef.current) {
+          navigatedRef.current = true;
+          stopPolling();
+          navigate(`/result/${placeId}`);
+          return;
         }
+
+        // FAILED — 에러 표시, 폴링 중단
+        if (status === 'FAILED') {
+          stopPolling();
+          setPageStatus('FAILED');
+          setError('분석 중 오류가 발생했습니다. 다시 시도해주세요.');
+          return;
+        }
+
       } catch (err) {
-        stopAll();
-        setStatus('FAILED');
+        stopPolling();
+        setPageStatus('FAILED');
         const errMsg = '서버와의 연결이 끊어졌습니다. 잠시 후 다시 시도해주세요.';
         if (axios.isAxiosError(err)) {
           const axiosErr = err as AxiosError<{ code: number; message: string }>;
@@ -101,25 +101,20 @@ export function AnalysisProgress() {
 
   useEffect(() => {
     if (!placeId) { navigate('/', { replace: true }); return; }
-    startStepAnimation();
     startPolling();
-    return () => stopAll();
+    return () => stopPolling();
   }, []);
 
   const handleRetry = () => {
     setError('');
     setCurrentStep(0);
-    setIsAnalysisDone(false);
-    setStatus('PROCESSING');
-    canNavigateRef.current = false;
-    analysisDoneRef.current = false;
+    setPageStatus('PROCESSING');
     navigatedRef.current = false;
-    startStepAnimation();
     startPolling();
   };
 
-  const progress = Math.min(currentStep * 25, 100);
-  const isAllStepsDone = currentStep >= STEPS.length;
+  // progress: 현재 단계 / 전체 단계 * 100
+  const progress = Math.min(Math.round((currentStep / STEPS.length) * 100), 100);
 
   return (
     <div className='min-h-screen bg-gray-50'>
@@ -130,21 +125,19 @@ export function AnalysisProgress() {
           {/* 제목 */}
           <div className='text-center mb-8'>
             <div className='inline-flex items-center justify-center size-16 bg-green-100 rounded-full mb-4'>
-              {status === 'FAILED' ? (
+              {pageStatus === 'FAILED' ? (
                 <XCircle className='size-8 text-red-500' />
               ) : (
                 <Loader2 className='size-8 text-green-600 animate-spin' />
               )}
             </div>
             <h1 className='text-3xl font-bold text-gray-900 mb-2'>
-              {status === 'FAILED' ? '분석 실패' : '분석 진행 중'}
+              {pageStatus === 'FAILED' ? '분석 실패' : '분석 진행 중'}
             </h1>
             <p className='text-gray-600'>
-              {status === 'FAILED'
+              {pageStatus === 'FAILED'
                 ? '분석 중 문제가 발생했습니다.'
-                : isAllStepsDone && !isAnalysisDone
-                  ? '분석 마무리 중입니다. 잠시만 기다려주세요...'
-                  : `${placeName}의 데이터를 수집하고 분석하고 있습니다`}
+                : `${placeName}의 데이터를 수집하고 분석하고 있습니다`}
             </p>
           </div>
 
@@ -166,7 +159,7 @@ export function AnalysisProgress() {
             <div className='space-y-3'>
               {STEPS.map((step, i) => {
                 const isDone = i < currentStep;
-                const isActive = i === currentStep;
+                const isActive = i === currentStep && pageStatus !== 'FAILED';
 
                 return (
                   <div
