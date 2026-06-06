@@ -29,7 +29,7 @@ export function AnalysisResult() {
     const load = async () => {
       try {
         setIsLoading(true);
-        // GET /v1/place-analysis/status?naverPlaceId={placeId}
+        // GET /v1/place-analysis?naverPlaceId={placeId}
         const response = await analysisApi.getAnalysisStatus(Number(placeId));
         const result = response.data;
 
