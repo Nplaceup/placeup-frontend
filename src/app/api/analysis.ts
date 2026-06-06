@@ -15,7 +15,7 @@ export const analysisApi = {
   },
 
   /**
-   * 2. GET /v1/place-analysis/status — 분석 상태 폴링 + 결과 조회
+   * 2. GET /v1/place-analysis — 분석 상태 폴링 + 결과 조회
    * analyzing: true → 진행 중 / analyzing: false → 완료 (결과 포함)
    */
   async getAnalysisStatus(naverPlaceId: number) {
