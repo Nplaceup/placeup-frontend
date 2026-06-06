@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { Header } from '../components/Header';
-import { Award, AlertCircle, TrendingUp, Search, MessageSquare, Lightbulb, Users } from 'lucide-react';
+import { Award, AlertCircle, TrendingUp, Search, MessageSquare, Lightbulb, Users, ChevronDown, ChevronUp } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar,
@@ -19,6 +19,7 @@ export function AnalysisResult() {
   const [data, setData] = useState<AnalysisResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [visibleCount, setVisibleCount] = useState(30); // 11위~30위까지 기본 표시
 
   useEffect(() => {
     if (!placeId) {
@@ -33,7 +34,6 @@ export function AnalysisResult() {
         const response = await analysisApi.getAnalysisStatus(Number(placeId));
         const result = response.data;
 
-        // 아직 분석 중이면 진행 페이지로 되돌아감
         if (result.analyzing || result.status !== 'COMPLETED') {
           navigate(`/analysis/${placeId}`, { replace: true });
           return;
@@ -113,13 +113,20 @@ export function AnalysisResult() {
   // 월간 총 검색량 합산
   const totalSearchVolume = keywords.reduce((sum, kw) => sum + kw.monthlySearchVolume, 0);
 
-  // 가로 막대 차트 데이터
-  const chartData = keywords.map((kw) => ({
+  // 키워드 분리
+  const top10 = keywords.slice(0, 10);
+  const rest = keywords.slice(10);
+  const visibleRest = rest.slice(0, visibleCount - 10); // 11위부터 visibleCount까지
+  const hiddenCount = rest.length - visibleRest.length;
+  const hasMore = hiddenCount > 0;
+
+  // 가로 막대 차트 데이터 (상위 10개)
+  const chartData = top10.map((kw) => ({
     keyword: kw.keyword,
     검색량: kw.monthlySearchVolume,
   }));
 
-  // 레이더 차트 데이터 — placeCompleteness(0~40), reviewQuality(0~60)
+  // 레이더 차트 데이터
   const radarData = seo
     ? [
         { category: '매장 정보 완성도', score: seo.placeCompleteness, max: 40 },
@@ -127,7 +134,7 @@ export function AnalysisResult() {
       ]
     : [];
 
-  // 피드백 합치기 — seo / review / competitor 세 종류
+  // 피드백 합치기
   const allFeedbacks = feedback
     ? [
         ...feedback.seoFeedback.map((msg) => ({ msg, type: 'seo' as const })),
@@ -208,46 +215,108 @@ export function AnalysisResult() {
           </div>
         </div>
 
-        {/* 추천 키워드(2) + 검색량 차트(1) — 하나의 블럭 */}
+        {/* 추천 키워드 — 상위 10개 카드 + 검색량 차트 */}
         <div className='bg-white rounded-xl border border-gray-200 overflow-hidden mb-8'>
           <div className='grid grid-cols-[2fr_1fr]'>
 
-            {/* 왼쪽: 추천 키워드 */}
+            {/* 왼쪽: 상위 10개 카드 */}
             <div className='p-6'>
-              <h2 className='text-base font-medium text-gray-900 mb-4'>추천 키워드</h2>
-              <div className='space-y-2'>
-                {keywords.map((kw, index) => (
-                  <div
-                    key={index}
-                    className='grid items-center gap-3 px-3 py-2.5 bg-gray-50 rounded-lg'
-                    style={{ gridTemplateColumns: '28px 1fr auto auto auto auto' }}
-                  >
-                    <div className='size-7 bg-green-100 rounded-full flex items-center justify-center text-xs font-medium text-green-800'>
-                      {index + 1}
+              <h2 className='text-base font-medium text-gray-900 mb-4'>상위 키워드 순위</h2>
+              <div className='grid grid-cols-2 gap-2'>
+                {top10.map((kw, index) => {
+                  const isTop3 = index < 3;
+                  return (
+                    <div
+                      key={index}
+                      className={`flex items-center gap-3 p-3 rounded-xl ${
+                        isTop3
+                          ? 'border-2 border-green-200 bg-green-50'
+                          : 'border border-gray-200 bg-white'
+                      }`}
+                    >
+                      {/* 순위 */}
+                      <div className={`text-xl font-bold min-w-[32px] ${isTop3 ? 'text-green-700' : 'text-gray-400'}`}>
+                        {index + 1}
+                        <span className='text-xs font-normal'>위</span>
+                      </div>
+
+                      {/* 정보 */}
+                      <div className='flex-1 min-w-0'>
+                        <div className='text-sm font-medium text-gray-900 truncate mb-1'>{kw.keyword}</div>
+                        <div className='flex items-center gap-1.5 flex-wrap'>
+                          <span className='text-xs text-gray-400'>
+                            {kw.monthlySearchVolume > 0 ? kw.monthlySearchVolume.toLocaleString() : '0'}
+                          </span>
+                          <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${competitionStyle[kw.competitionLevel]}`}>
+                            {kw.competitionLevel}
+                          </span>
+                          {kw.isOpportunity && (
+                            <span className='text-xs px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded-full font-medium'>기회</span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* 점수 */}
+                      <div className='text-right flex-shrink-0'>
+                        <div className={`text-base font-bold ${isTop3 ? 'text-green-700' : 'text-gray-500'}`}>
+                          {Math.round(kw.score * 100)}
+                        </div>
+                        <div className='text-xs text-gray-400'>점</div>
+                      </div>
                     </div>
-                    <span className='text-sm font-medium text-gray-900 truncate'>{kw.keyword}</span>
-                    <span className='text-xs text-gray-400 whitespace-nowrap'>
-                      {kw.monthlySearchVolume > 0 ? kw.monthlySearchVolume.toLocaleString() : '0'}
-                    </span>
-                    <span className='text-xs text-gray-400 whitespace-nowrap'>
-                      {kw.rankNo !== null ? `${kw.rankNo}위` : '—'}
-                    </span>
-                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${competitionStyle[kw.competitionLevel]}`}>
-                      경쟁 {kw.competitionLevel}
-                    </span>
-                    {kw.isOpportunity
-                      ? <span className='text-xs px-2 py-0.5 bg-blue-100 text-blue-800 rounded-full font-medium whitespace-nowrap'>기회</span>
-                      : <span />
-                    }
-                  </div>
-                ))}
+                  );
+                })}
               </div>
+
+              {/* 11위 이후 리스트 */}
+              {rest.length > 0 && (
+                <div className='mt-6'>
+                  <div className='text-xs font-medium text-gray-400 mb-3 pb-2 border-b border-gray-100'>
+                    11위 이후
+                  </div>
+                  <div className='space-y-0'>
+                    {visibleRest.map((kw, index) => (
+                      <div
+                        key={index}
+                        className='grid items-center gap-3 py-2.5 border-b border-gray-100 last:border-0'
+                        style={{ gridTemplateColumns: '32px 1fr auto auto auto' }}
+                      >
+                        <span className='text-xs text-gray-400 text-center'>{index + 11}</span>
+                        <span className='text-sm font-medium text-gray-900 truncate'>{kw.keyword}</span>
+                        <span className='text-xs text-gray-400 whitespace-nowrap'>
+                          {kw.monthlySearchVolume > 0 ? kw.monthlySearchVolume.toLocaleString() : '0'}
+                        </span>
+                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${competitionStyle[kw.competitionLevel]}`}>
+                          {kw.competitionLevel}
+                        </span>
+                        {kw.isOpportunity
+                          ? <span className='text-xs px-2 py-0.5 bg-blue-100 text-blue-800 rounded-full font-medium whitespace-nowrap'>기회</span>
+                          : <span />
+                        }
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* 더보기 버튼 */}
+                  {hasMore && (
+                    <div className='flex justify-center mt-4'>
+                      <button
+                        onClick={() => setVisibleCount((prev) => prev + 20)}
+                        className='flex items-center gap-1.5 px-5 py-2 text-sm text-gray-500 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg transition-colors'
+                      >
+                        <ChevronDown className='size-4' />
+                        더보기 ({Math.min(hiddenCount, 20)}개)
+                      </button>
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* 오른쪽: 검색량 비교 */}
             <div className='p-6 border-l border-gray-200'>
               <h2 className='text-base font-medium text-gray-900 mb-4'>검색량 비교</h2>
-              <ResponsiveContainer width='100%' height={240}>
+              <ResponsiveContainer width='100%' height={300}>
                 <BarChart data={chartData} layout='vertical' margin={{ left: 0, right: 12 }}>
                   <CartesianGrid strokeDasharray='3 3' horizontal={false} />
                   <XAxis
@@ -261,15 +330,15 @@ export function AnalysisResult() {
                 </BarChart>
               </ResponsiveContainer>
             </div>
+
           </div>
         </div>
 
-        {/* SEO 점수(1) + 레이더 차트(1) — 하나의 블럭 */}
+        {/* 플레이스 관리 점수 + 레이더 차트 */}
         {seo && (
           <div className='bg-white rounded-xl border border-gray-200 overflow-hidden mb-8'>
             <div className='grid grid-cols-2'>
 
-              {/* 왼쪽: 세부 점수 */}
               <div className='p-6'>
                 <div className='flex items-center justify-between mb-2'>
                   <h2 className='text-base font-medium text-gray-900'>플레이스 관리 점수</h2>
@@ -303,7 +372,6 @@ export function AnalysisResult() {
                 </div>
               </div>
 
-              {/* 오른쪽: 레이더 차트 */}
               <div className='p-6 border-l border-gray-200 flex items-center'>
                 <ResponsiveContainer width='100%' height={240}>
                   <RadarChart data={radarData}>
@@ -314,6 +382,7 @@ export function AnalysisResult() {
                   </RadarChart>
                 </ResponsiveContainer>
               </div>
+
             </div>
           </div>
         )}
@@ -340,7 +409,7 @@ export function AnalysisResult() {
           </div>
         )}
 
-        {/* 매장 키워드 요약 (placeSummary) */}
+        {/* 방문자 키워드 요약 */}
         {feedback?.placeSummary && Object.keys(feedback.placeSummary).length > 0 && (
           <div className='bg-white rounded-xl border border-gray-200 p-6'>
             <div className='flex items-center gap-2 mb-4'>
@@ -348,11 +417,11 @@ export function AnalysisResult() {
               <h2 className='text-base font-medium text-gray-900'>방문자 키워드 요약</h2>
             </div>
             <div className='grid grid-cols-2 gap-4 sm:grid-cols-3'>
-              {Object.entries(feedback.placeSummary).map(([category, keywords]) => (
+              {Object.entries(feedback.placeSummary).map(([category, kws]) => (
                 <div key={category} className='bg-gray-50 rounded-lg p-4'>
                   <div className='text-xs font-medium text-gray-500 mb-2'>{category}</div>
                   <div className='flex flex-wrap gap-1.5'>
-                    {keywords.map((kw) => (
+                    {kws.map((kw) => (
                       <span key={kw} className='text-xs px-2 py-1 bg-white border border-gray-200 rounded-full text-gray-700'>
                         {kw}
                       </span>
