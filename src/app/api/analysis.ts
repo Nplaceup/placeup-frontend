@@ -19,7 +19,7 @@ export const analysisApi = {
    * analyzing: true → 진행 중 / analyzing: false → 완료 (결과 포함)
    */
   async getAnalysisStatus(naverPlaceId: number) {
-    const response = await api.get<ApiResponse<AnalysisResponse>>('/v1/place-analysis/status', {
+    const response = await api.get<ApiResponse<AnalysisResponse>>('/v1/place-analysis', {
       params: { naverPlaceId },
     });
 
