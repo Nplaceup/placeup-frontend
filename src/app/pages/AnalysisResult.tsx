@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { Header } from '../components/Header';
-import { Award, AlertCircle, TrendingUp, Search, MessageSquare, Lightbulb } from 'lucide-react';
+import { Award, AlertCircle, TrendingUp, Search, MessageSquare, Lightbulb, Users } from 'lucide-react';
 import {
   BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
   RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar,
@@ -29,7 +29,7 @@ export function AnalysisResult() {
     const load = async () => {
       try {
         setIsLoading(true);
-        // GET /v1/place-analysis?naverPlaceId={placeId}
+        // GET /v1/place-analysis/status?naverPlaceId={placeId}
         const response = await analysisApi.getAnalysisStatus(Number(placeId));
         const result = response.data;
 
@@ -119,21 +119,20 @@ export function AnalysisResult() {
     검색량: kw.monthlySearchVolume,
   }));
 
-  // 레이더 차트 데이터
+  // 레이더 차트 데이터 — placeCompleteness(0~40), reviewQuality(0~60)
   const radarData = seo
     ? [
-        { category: '키워드 최적화', score: seo.keywordOptimization, max: 40 },
-        { category: '리뷰 품질',     score: seo.reviewQuality,       max: 30 },
-        { category: '검색 노출',     score: seo.searchExposure,      max: 20 },
-        { category: '경쟁 포지션',   score: seo.competition,         max: 10 },
+        { category: '매장 정보 완성도', score: seo.placeCompleteness, max: 40 },
+        { category: '리뷰 품질',        score: seo.reviewQuality,      max: 60 },
       ]
     : [];
 
-  // SEO + 리뷰 피드백 합치기
+  // 피드백 합치기 — seo / review / competitor 세 종류
   const allFeedbacks = feedback
     ? [
         ...feedback.seoFeedback.map((msg) => ({ msg, type: 'seo' as const })),
         ...feedback.reviewFeedback.map((msg) => ({ msg, type: 'review' as const })),
+        ...feedback.competitorFeedback.map((msg) => ({ msg, type: 'competitor' as const })),
       ]
     : [];
 
@@ -142,6 +141,13 @@ export function AnalysisResult() {
     '높음': 'bg-red-100 text-red-800',
     '중간': 'bg-yellow-100 text-yellow-800',
     '낮음': 'bg-green-100 text-green-800',
+  };
+
+  // 피드백 타입별 스타일
+  const feedbackStyle = {
+    seo:        { bg: 'bg-yellow-50 border-yellow-200', icon: 'text-yellow-600' },
+    review:     { bg: 'bg-blue-50 border-blue-200',     icon: 'text-blue-500' },
+    competitor: { bg: 'bg-purple-50 border-purple-200', icon: 'text-purple-500' },
   };
 
   // ── 렌더 ───────────────────────────────────────────────────────
@@ -266,7 +272,7 @@ export function AnalysisResult() {
               {/* 왼쪽: 세부 점수 */}
               <div className='p-6'>
                 <div className='flex items-center justify-between mb-2'>
-                  <h2 className='text-base font-medium text-gray-900'>SEO 점수</h2>
+                  <h2 className='text-base font-medium text-gray-900'>플레이스 관리 점수</h2>
                   <div className='flex items-center gap-2'>
                     <Award className='size-4 text-green-600' />
                     <span className='text-xl font-bold text-green-600'>{seo.score}점</span>
@@ -303,7 +309,7 @@ export function AnalysisResult() {
                   <RadarChart data={radarData}>
                     <PolarGrid />
                     <PolarAngleAxis dataKey='category' tick={{ fontSize: 11 }} />
-                    <PolarRadiusAxis angle={90} domain={[0, 40]} tick={false} />
+                    <PolarRadiusAxis angle={90} domain={[0, 60]} tick={false} />
                     <Radar name='점수' dataKey='score' stroke='#16a34a' fill='#16a34a' fillOpacity={0.3} />
                   </RadarChart>
                 </ResponsiveContainer>
@@ -314,7 +320,7 @@ export function AnalysisResult() {
 
         {/* 개선 방안 */}
         {feedback && (
-          <div className='bg-white rounded-xl border border-gray-200 p-6'>
+          <div className='bg-white rounded-xl border border-gray-200 p-6 mb-8'>
             <div className='flex items-center gap-2 mb-1'>
               <Lightbulb className='size-4 text-yellow-500' />
               <h2 className='text-base font-medium text-gray-900'>개선 방안</h2>
@@ -324,18 +330,34 @@ export function AnalysisResult() {
               {allFeedbacks.map((item, i) => (
                 <div
                   key={i}
-                  className={`flex items-start gap-3 p-4 rounded-lg border ${
-                    item.type === 'seo'
-                      ? 'bg-yellow-50 border-yellow-200'
-                      : 'bg-blue-50 border-blue-200'
-                  }`}
+                  className={`flex items-start gap-3 p-4 rounded-lg border ${feedbackStyle[item.type].bg}`}
                 >
-                  <AlertCircle
-                    className={`size-4 flex-shrink-0 mt-0.5 ${
-                      item.type === 'seo' ? 'text-yellow-600' : 'text-blue-500'
-                    }`}
-                  />
+                  <AlertCircle className={`size-4 flex-shrink-0 mt-0.5 ${feedbackStyle[item.type].icon}`} />
                   <p className='text-sm text-gray-700'>{item.msg}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* 매장 키워드 요약 (placeSummary) */}
+        {feedback?.placeSummary && Object.keys(feedback.placeSummary).length > 0 && (
+          <div className='bg-white rounded-xl border border-gray-200 p-6'>
+            <div className='flex items-center gap-2 mb-4'>
+              <Users className='size-4 text-gray-500' />
+              <h2 className='text-base font-medium text-gray-900'>방문자 키워드 요약</h2>
+            </div>
+            <div className='grid grid-cols-2 gap-4 sm:grid-cols-3'>
+              {Object.entries(feedback.placeSummary).map(([category, keywords]) => (
+                <div key={category} className='bg-gray-50 rounded-lg p-4'>
+                  <div className='text-xs font-medium text-gray-500 mb-2'>{category}</div>
+                  <div className='flex flex-wrap gap-1.5'>
+                    {keywords.map((kw) => (
+                      <span key={kw} className='text-xs px-2 py-1 bg-white border border-gray-200 rounded-full text-gray-700'>
+                        {kw}
+                      </span>
+                    ))}
+                  </div>
                 </div>
               ))}
             </div>
