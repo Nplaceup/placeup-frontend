@@ -1,6 +1,6 @@
 import axios from 'axios';
 
-const API_SERVER_URL = 'http://localhost:8080';
+const API_SERVER_URL = 'https://annual-sic-christmas-asin.trycloudflare.com'; 
 
 function createApi(headers: Record<string, string>) {
   const instance = axios.create({
