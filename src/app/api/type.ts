@@ -4,11 +4,25 @@
 export interface ApiResponse<T> {
   code: number;
   message: string;
-  data: T; // 제네릭
+  data: T;
 }
 
 /**
- * 1. 플레이스 분석 트리거 + 폴링
+ * 분석 상태값 — 변경 없음
+ */
+export type AnalysisStatus =
+  | 'REQUESTED'
+  | 'PLACE_CRAWLING'
+  | 'REVIEW_CRAWLING'
+  | 'KEYWORD_EXTRACTING'
+  | 'RANKING_CRAWLING'
+  | 'SEARCH_VOLUME_CRAWLING'
+  | 'SEO_ANALYZING'
+  | 'COMPLETED'
+  | 'FAILED';
+
+/**
+ * 1. POST /v1/place-analysis — 분석 트리거 응답
  */
 export interface PlaceAnalysisResponse {
   naverPlaceId: number;
@@ -17,7 +31,7 @@ export interface PlaceAnalysisResponse {
 }
 
 /**
- * 2. 분석 결과 통합 조회
+ * 2. GET /v1/place-analysis — 분석 상태 폴링 + 결과 조회 응답
  */
 export interface KeywordAnalysis {
   keyword: string;
@@ -29,23 +43,24 @@ export interface KeywordAnalysis {
 }
 
 export interface SeoAnalysis {
-  score: number;
-  grade: string;
-  keywordOptimization: number;
-  reviewQuality: number;
-  searchExposure: number;
-  competition: number;
+  score: number;               // 총점 0~100
+  grade: string;               // 예: "🟠 미흡"
+  placeCompleteness: number;   // 매장 정보 완성도 점수 (0~40) — 신규
+  reviewQuality: number;       // 리뷰 품질 점수 (0~60) — 범위 변경
 }
 
 export interface FeedbackAnalysis {
   summary: string;
-  seoFeedback: string[];
-  reviewFeedback: string[];
+  seoFeedback: string[];           // 최대 3개
+  reviewFeedback: string[];        // 최대 3개
+  competitorFeedback: string[];    // 신규 — 경쟁업체 분석 기반 피드백 (최대 3개)
+  placeSummary: Record<string, string[]>; // 신규 — 카테고리별 대표 키워드
 }
 
 export interface AnalysisResponse {
   naverPlaceId: number;
   placeName: string;
+  status: AnalysisStatus;
   analyzing: boolean;
   keywords: KeywordAnalysis[];
   seo: SeoAnalysis | null;
