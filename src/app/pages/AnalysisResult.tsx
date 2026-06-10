@@ -30,7 +30,7 @@ export function AnalysisResult() {
     const load = async () => {
       try {
         setIsLoading(true);
-        // GET /v1/place-analysis/status?naverPlaceId={placeId}
+        // GET /v1/place-analysis?naverPlaceId={placeId}
         const response = await analysisApi.getAnalysisStatus(Number(placeId));
         const result = response.data;
 
@@ -100,7 +100,7 @@ export function AnalysisResult() {
 
   // ── 데이터 가공 ────────────────────────────────────────────────
 
-  const { placeName, keywords, seo, feedback } = data;
+  const { placeName, keywords = [] , seo, feedback } = data;
 
   // 최고 순위 키워드
   const bestKeyword = keywords

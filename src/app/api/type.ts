@@ -31,7 +31,7 @@ export interface PlaceAnalysisResponse {
 }
 
 /**
- * 2. GET /v1/place-analysis/status — 분석 상태 폴링 + 결과 조회 응답
+ * 2. GET /v1/place-analysis — 분석 상태 폴링 + 결과 조회 응답
  */
 export interface KeywordAnalysis {
   keyword: string;
