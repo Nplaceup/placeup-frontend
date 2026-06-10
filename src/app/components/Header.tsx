@@ -6,7 +6,7 @@ const NAV_ITEMS = [
   // { path: "/keyword-ranking",   label: "키워드 순위", icon: TrendingUp },
 ];
 
-export function Header() {
+export function Header({ storeName }: { storeName?: string }) {
   const navigate = useNavigate();
   const location = useLocation();
 
