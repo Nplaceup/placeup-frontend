@@ -1,16 +1,23 @@
 import { useEffect, useState } from 'react';
 import { useParams, useNavigate } from 'react-router';
 import { Header } from '../components/Header';
-import { Award, AlertCircle, TrendingUp, Search, MessageSquare, Lightbulb, Users, ChevronDown, ChevronUp } from 'lucide-react';
+import { Award, AlertCircle, BarChart2, Search, Lightbulb, Users, ChevronDown } from 'lucide-react';
 import {
-  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer,
-  RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Radar,
+  BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Cell,
 } from 'recharts';
 import axios, { AxiosError } from 'axios';
 import { analysisApi } from '../api/analysis';
 import { AnalysisResponse } from '../api/type';
 
-// ── 컴포넌트 ──────────────────────────────────────────────────────
+const CustomTooltip = ({ active, payload, label }: any) => {
+  if (!active || !payload?.length) return null;
+  return (
+    <div className='bg-foreground text-background text-xs px-3 py-2 rounded-lg'>
+      <p className='font-bold mb-0.5'>{label}</p>
+      <p className='text-[color:var(--chart-2)]'>{payload[0].value.toLocaleString()}회 / 월</p>
+    </div>
+  );
+};
 
 export function AnalysisResult() {
   const { placeId } = useParams();
@@ -19,26 +26,19 @@ export function AnalysisResult() {
   const [data, setData] = useState<AnalysisResponse | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
-  const [visibleCount, setVisibleCount] = useState(30); // 11위~30위까지 기본 표시
+  const [showAllKeywords, setShowAllKeywords] = useState(false);
 
   useEffect(() => {
-    if (!placeId) {
-      navigate('/', { replace: true });
-      return;
-    }
-
+    if (!placeId) { navigate('/', { replace: true }); return; }
     const load = async () => {
       try {
         setIsLoading(true);
-        // GET /v1/place-analysis?naverPlaceId={placeId}
         const response = await analysisApi.getAnalysisStatus(Number(placeId));
         const result = response.data;
-
         if (result.analyzing || result.status !== 'COMPLETED') {
           navigate(`/analysis/${placeId}`, { replace: true });
           return;
         }
-
         setData(result);
       } catch (err) {
         const errMsg = '데이터를 불러오는 중 오류가 발생했습니다.';
@@ -52,44 +52,37 @@ export function AnalysisResult() {
         setIsLoading(false);
       }
     };
-
     load();
   }, [placeId]);
 
-  // ── 로딩 중 ────────────────────────────────────────────────────
-
   if (isLoading) {
     return (
-      <div className='min-h-screen bg-gray-50'>
+      <div className='min-h-screen bg-background'>
         <Header />
-        <div className='container mx-auto px-4 py-12'>
-          <div className='animate-pulse space-y-4 max-w-5xl mx-auto'>
-            <div className='h-16 bg-gray-200 rounded-xl' />
+        <div className='container mx-auto px-4 py-12 max-w-6xl'>
+          <div className='animate-pulse space-y-4'>
+            <div className='h-16 bg-muted rounded-lg' />
             <div className='grid grid-cols-3 gap-4'>
-              {Array.from({ length: 3 }).map((_, i) => (
-                <div key={i} className='h-24 bg-gray-200 rounded-xl' />
-              ))}
+              {Array.from({ length: 3 }).map((_, i) => <div key={i} className='h-24 bg-muted rounded-lg' />)}
             </div>
-            <div className='h-64 bg-gray-200 rounded-xl' />
-            <div className='h-64 bg-gray-200 rounded-xl' />
+            <div className='h-64 bg-muted rounded-lg' />
+            <div className='h-64 bg-muted rounded-lg' />
           </div>
         </div>
       </div>
     );
   }
 
-  // ── 에러 ───────────────────────────────────────────────────────
-
   if (error || !data) {
     return (
-      <div className='min-h-screen bg-gray-50'>
+      <div className='min-h-screen bg-background'>
         <Header />
         <div className='container mx-auto px-4 py-12 text-center'>
-          <AlertCircle className='size-12 text-red-400 mx-auto mb-4' />
-          <p className='text-gray-600 mb-6'>{error || '데이터를 불러올 수 없습니다.'}</p>
+          <AlertCircle className='size-12 text-destructive mx-auto mb-4' />
+          <p className='text-muted-foreground mb-6'>{error || '데이터를 불러올 수 없습니다.'}</p>
           <button
             onClick={() => navigate('/')}
-            className='px-6 py-2 bg-green-600 hover:bg-green-700 text-white font-medium rounded-lg transition-colors'
+            className='px-6 py-2 text-sm font-medium rounded-lg bg-primary text-primary-foreground hover:opacity-90 transition-opacity'
           >
             처음으로 돌아가기
           </button>
@@ -98,43 +91,25 @@ export function AnalysisResult() {
     );
   }
 
-  // ── 데이터 가공 ────────────────────────────────────────────────
+  const { placeName, keywords = [], seo, feedback } = data;
 
-  const { placeName, keywords = [] , seo, feedback } = data;
+  // ── 1. 플레이스 점수 ──────────────────────────────────────────
+  const radarData = seo
+    ? [
+        { category: '매장 정보 완성도', score: seo.placeCompleteness, max: 40 },
+        { category: '리뷰 품질', score: seo.reviewQuality, max: 60 },
+      ]
+    : [];
 
-  // 최고 순위 키워드
+  // ── 2. 요약 카드 ──────────────────────────────────────────────
   const bestKeyword = keywords
     .filter((kw) => kw.rankNo !== null)
     .sort((a, b) => (a.rankNo ?? 999) - (b.rankNo ?? 999))[0];
 
-  // 기회 키워드 수
   const opportunityCount = keywords.filter((kw) => kw.isOpportunity).length;
-
-  // 월간 총 검색량 합산
   const totalSearchVolume = keywords.reduce((sum, kw) => sum + kw.monthlySearchVolume, 0);
 
-  // 키워드 분리
-  const top10 = keywords.slice(0, 10);
-  const rest = keywords.slice(10);
-  const visibleRest = rest.slice(0, visibleCount - 10); // 11위부터 visibleCount까지
-  const hiddenCount = rest.length - visibleRest.length;
-  const hasMore = hiddenCount > 0;
-
-  // 가로 막대 차트 데이터 (상위 10개)
-  const chartData = top10.map((kw) => ({
-    keyword: kw.keyword,
-    검색량: kw.monthlySearchVolume,
-  }));
-
-  // 레이더 차트 데이터
-  const radarData = seo
-    ? [
-        { category: '매장 정보 완성도', score: seo.placeCompleteness, max: 40 },
-        { category: '리뷰 품질',        score: seo.reviewQuality,      max: 60 },
-      ]
-    : [];
-
-  // 피드백 합치기
+  // ── 3. 개선 방안 + 방문자 키워드 ─────────────────────────────
   const allFeedbacks = feedback
     ? [
         ...feedback.seoFeedback.map((msg) => ({ msg, type: 'seo' as const })),
@@ -143,266 +118,124 @@ export function AnalysisResult() {
       ]
     : [];
 
-  // 경쟁도 배지 색상
-  const competitionStyle = {
-    '높음': 'bg-red-100 text-red-800',
-    '중간': 'bg-yellow-100 text-yellow-800',
-    '낮음': 'bg-green-100 text-green-800',
+  const feedbackStyle: Record<string, { badge: string; label: string }> = {
+    seo:        { badge: 'bg-[#FFF8E1] text-[#F57F17]',  label: '플레이스' },
+    review:     { badge: 'bg-[#E3F2FD] text-[#1565C0]',  label: '리뷰' },
+    competitor: { badge: 'bg-[#F3E5F5] text-[#6A1B9A]',  label: '경쟁사' },
   };
 
-  // 피드백 타입별 스타일
-  const feedbackStyle = {
-    seo:        { bg: 'bg-yellow-50 border-yellow-200', icon: 'text-yellow-600' },
-    review:     { bg: 'bg-blue-50 border-blue-200',     icon: 'text-blue-500' },
-    competitor: { bg: 'bg-purple-50 border-purple-200', icon: 'text-purple-500' },
-  };
+  // ── 4. 키워드 테이블 ──────────────────────────────────────────
+  const BASE_COUNT = 20;
+  const PAGE_SIZE = 10;
+  const visibleCount = BASE_COUNT + (showAllKeywords ? Math.ceil((keywords.length - BASE_COUNT) / PAGE_SIZE) * PAGE_SIZE : 0);
+  const visibleKeywords = keywords.slice(0, Math.min(visibleCount, keywords.length));
+  const hasMore = visibleKeywords.length < keywords.length;
 
-  // ── 렌더 ───────────────────────────────────────────────────────
+  const chartData = keywords.slice(0, 8).map((kw) => ({
+    keyword: kw.keyword,
+    검색량: kw.monthlySearchVolume,
+  }));
+
+  const competitionStyle: Record<string, string> = {
+    '높음': 'bg-[#FDECEA] text-[#C62828]',
+    '중간': 'bg-[#FFF8E1] text-[#F57F17]',
+    '낮음': 'bg-accent text-accent-foreground',
+  };
 
   return (
-    <div className='min-h-screen bg-gray-50'>
+    <div className='min-h-screen bg-background'>
       <Header />
 
       <div className='container mx-auto px-4 py-8 max-w-6xl'>
 
-        {/* 매장명 헤더 */}
-        <div className='bg-white rounded-xl shadow-sm border border-gray-200 p-6 mb-8'>
-          <div className='flex items-center justify-between'>
-            <h1 className='text-2xl font-bold text-gray-900'>{placeName}</h1>
-            <button
-              onClick={() => navigate(`/keyword-ranking/${placeId}`)}
-              className='flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-medium rounded-lg transition-colors'
-            >
-              <TrendingUp className='size-4' />
-              키워드 검색 순위
-            </button>
-          </div>
+        {/* 매장명 — 흰 배경 */}
+        <div className='bg-background border border-border rounded-lg p-5 mb-4'>
+          <h1 className='text-xl font-bold text-foreground'>{placeName}</h1>
         </div>
 
-        {/* 요약 카드 3개 */}
-        <div className='grid grid-cols-3 gap-4 mb-8'>
-          <div className='bg-green-700 rounded-xl p-5 text-white'>
-            <div className='flex items-center justify-between mb-2'>
-              <span className='text-green-200 text-sm'>최고 키워드 순위</span>
-              <TrendingUp className='size-4 text-green-300' />
-            </div>
-            <div className='text-3xl font-bold mb-1'>
-              {bestKeyword ? `${bestKeyword.rankNo}위` : '-'}
-            </div>
-            <div className='text-green-300 text-sm truncate'>
-              {bestKeyword ? bestKeyword.keyword : '순위 데이터 없음'}
-            </div>
-          </div>
-
-          <div className='bg-white rounded-xl border border-gray-200 p-5'>
-            <div className='flex items-center justify-between mb-2'>
-              <span className='text-gray-500 text-sm'>추천 키워드</span>
-              <Search className='size-4 text-gray-400' />
-            </div>
-            <div className='text-3xl font-bold text-gray-900 mb-1'>{keywords.length}개</div>
-            <div className='text-sm text-gray-400'>기회 키워드 {opportunityCount}개 포함</div>
-          </div>
-
-          <div className='bg-white rounded-xl border border-gray-200 p-5'>
-            <div className='flex items-center justify-between mb-2'>
-              <span className='text-gray-500 text-sm'>월간 총 검색량</span>
-              <MessageSquare className='size-4 text-gray-400' />
-            </div>
-            <div className='text-3xl font-bold text-gray-900 mb-1'>
-              {totalSearchVolume.toLocaleString()}
-            </div>
-            <div className='text-sm text-gray-400'>추천 키워드 합산</div>
-          </div>
-        </div>
-
-        {/* 추천 키워드 — 상위 10개 카드 + 검색량 차트 */}
-        <div className='bg-white rounded-xl border border-gray-200 overflow-hidden mb-8'>
-          <div className='grid grid-cols-[2fr_1fr]'>
-
-            {/* 왼쪽: 상위 10개 카드 */}
-            <div className='p-6'>
-              <h2 className='text-base font-medium text-gray-900 mb-4'>상위 키워드 순위</h2>
-              <div className='grid grid-cols-2 gap-2'>
-                {top10.map((kw, index) => {
-                  const isTop3 = index < 3;
-                  return (
-                    <div
-                      key={index}
-                      className={`flex items-center gap-3 p-3 rounded-xl ${
-                        isTop3
-                          ? 'border-2 border-green-200 bg-green-50'
-                          : 'border border-gray-200 bg-white'
-                      }`}
-                    >
-                      {/* 순위 */}
-                      <div className={`text-xl font-bold min-w-[32px] ${isTop3 ? 'text-green-700' : 'text-gray-400'}`}>
-                        {index + 1}
-                        <span className='text-xs font-normal'>위</span>
-                      </div>
-
-                      {/* 정보 */}
-                      <div className='flex-1 min-w-0'>
-                        <div className='text-sm font-medium text-gray-900 truncate mb-1'>{kw.keyword}</div>
-                        <div className='flex items-center gap-1.5 flex-wrap'>
-                          <span className='text-xs text-gray-400'>
-                            {kw.monthlySearchVolume > 0 ? kw.monthlySearchVolume.toLocaleString() : '0'}
-                          </span>
-                          <span className={`text-xs px-1.5 py-0.5 rounded-full font-medium ${competitionStyle[kw.competitionLevel]}`}>
-                            {kw.competitionLevel}
-                          </span>
-                          {kw.isOpportunity && (
-                            <span className='text-xs px-1.5 py-0.5 bg-blue-100 text-blue-800 rounded-full font-medium'>기회</span>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* 점수 */}
-                      <div className='text-right flex-shrink-0'>
-                        <div className={`text-base font-bold ${isTop3 ? 'text-green-700' : 'text-gray-500'}`}>
-                          {Math.round(kw.score * 100)}
-                        </div>
-                        <div className='text-xs text-gray-400'>점</div>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* 11위 이후 리스트 */}
-              {rest.length > 0 && (
-                <div className='mt-6'>
-                  <div className='text-xs font-medium text-gray-400 mb-3 pb-2 border-b border-gray-100'>
-                    11위 이후
-                  </div>
-                  <div className='space-y-0'>
-                    {visibleRest.map((kw, index) => (
-                      <div
-                        key={index}
-                        className='grid items-center gap-3 py-2.5 border-b border-gray-100 last:border-0'
-                        style={{ gridTemplateColumns: '32px 1fr auto auto auto' }}
-                      >
-                        <span className='text-xs text-gray-400 text-center'>{index + 11}</span>
-                        <span className='text-sm font-medium text-gray-900 truncate'>{kw.keyword}</span>
-                        <span className='text-xs text-gray-400 whitespace-nowrap'>
-                          {kw.monthlySearchVolume > 0 ? kw.monthlySearchVolume.toLocaleString() : '0'}
-                        </span>
-                        <span className={`text-xs px-2 py-0.5 rounded-full font-medium whitespace-nowrap ${competitionStyle[kw.competitionLevel]}`}>
-                          {kw.competitionLevel}
-                        </span>
-                        {kw.isOpportunity
-                          ? <span className='text-xs px-2 py-0.5 bg-blue-100 text-blue-800 rounded-full font-medium whitespace-nowrap'>기회</span>
-                          : <span />
-                        }
-                      </div>
-                    ))}
-                  </div>
-
-                  {/* 더보기 버튼 */}
-                  {hasMore && (
-                    <div className='flex justify-center mt-4'>
-                      <button
-                        onClick={() => setVisibleCount((prev) => prev + 20)}
-                        className='flex items-center gap-1.5 px-5 py-2 text-sm text-gray-500 bg-gray-50 hover:bg-gray-100 border border-gray-200 rounded-lg transition-colors'
-                      >
-                        <ChevronDown className='size-4' />
-                        더보기 ({Math.min(hiddenCount, 20)}개)
-                      </button>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-
-            {/* 오른쪽: 검색량 비교 */}
-            <div className='p-6 border-l border-gray-200'>
-              <h2 className='text-base font-medium text-gray-900 mb-4'>검색량 비교</h2>
-              <ResponsiveContainer width='100%' height={300}>
-                <BarChart data={chartData} layout='vertical' margin={{ left: 0, right: 12 }}>
-                  <CartesianGrid strokeDasharray='3 3' horizontal={false} />
-                  <XAxis
-                    type='number'
-                    tick={{ fontSize: 10, fill: '#9ca3af' }}
-                    tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)}
-                  />
-                  <YAxis type='category' dataKey='keyword' tick={{ fontSize: 11, fill: '#6b7280' }} width={60} />
-                  <Tooltip formatter={(v: number) => v.toLocaleString()} />
-                  <Bar dataKey='검색량' fill='#16a34a' radius={[0, 4, 4, 0]} />
-                </BarChart>
-              </ResponsiveContainer>
-            </div>
-
-          </div>
-        </div>
-
-        {/* 플레이스 관리 점수 + 레이더 차트 */}
+        {/* 플레이스 점수 — 매장명 바로 아래 */}
         {seo && (
-          <div className='bg-white rounded-xl border border-gray-200 overflow-hidden mb-8'>
-            <div className='grid grid-cols-2'>
-
-              <div className='p-6'>
-                <div className='flex items-center justify-between mb-2'>
-                  <h2 className='text-base font-medium text-gray-900'>플레이스 관리 점수</h2>
-                  <div className='flex items-center gap-2'>
-                    <Award className='size-4 text-green-600' />
-                    <span className='text-xl font-bold text-green-600'>{seo.score}점</span>
-                    <span className='text-sm text-gray-400'>{seo.grade}</span>
+          <div className='bg-primary border border-primary rounded-lg p-5 mb-6'>
+            <div className='flex items-center justify-between'>
+              <div className='flex items-center gap-3'>
+                <Award className='size-5 text-primary-foreground' />
+                <span className='text-sm font-bold text-primary-foreground'>플레이스 점수</span>
+                <span className='text-sm font-medium text-primary-foreground/70'>{seo.grade}</span>
+              </div>
+              <span className='text-3xl font-bold text-primary-foreground'>{seo.score}점</span>
+            </div>
+            <div className='w-full rounded-full h-1.5 mt-4 mb-4' style={{ background: 'rgba(255,255,255,0.25)' }}>
+              <div className='h-1.5 rounded-full bg-primary-foreground transition-all' style={{ width: `${seo.score}%` }} />
+            </div>
+            <div className='grid grid-cols-2 gap-4'>
+              {radarData.map((item) => (
+                <div key={item.category}>
+                  <div className='flex justify-between text-xs mb-1'>
+                    <span className='text-primary-foreground/70 font-medium'>{item.category}</span>
+                    <span className='font-bold text-primary-foreground'>{item.score} <span className='font-normal text-primary-foreground/60'>/ {item.max}</span></span>
+                  </div>
+                  <div className='w-full rounded-full h-1' style={{ background: 'rgba(255,255,255,0.25)' }}>
+                    <div
+                      className='h-1 rounded-full bg-primary-foreground transition-all'
+                      style={{ width: `${Math.round((item.score / item.max) * 100)}%` }}
+                    />
                   </div>
                 </div>
-                <div className='w-full bg-gray-100 rounded-full h-2.5 mb-6'>
-                  <div
-                    className='h-2.5 rounded-full bg-yellow-400 transition-all'
-                    style={{ width: `${seo.score}%` }}
-                  />
-                </div>
-                <div className='space-y-4'>
-                  {radarData.map((item) => (
-                    <div key={item.category}>
-                      <div className='flex justify-between text-sm mb-1'>
-                        <span className='text-gray-600'>{item.category}</span>
-                        <span className='font-medium text-gray-900'>{item.score} / {item.max}</span>
-                      </div>
-                      <div className='w-full bg-gray-100 rounded-full h-1.5'>
-                        <div
-                          className='h-1.5 rounded-full bg-green-500 transition-all'
-                          style={{ width: `${Math.round((item.score / item.max) * 100)}%` }}
-                        />
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              <div className='p-6 border-l border-gray-200 flex items-center'>
-                <ResponsiveContainer width='100%' height={240}>
-                  <RadarChart data={radarData}>
-                    <PolarGrid />
-                    <PolarAngleAxis dataKey='category' tick={{ fontSize: 11 }} />
-                    <PolarRadiusAxis angle={90} domain={[0, 60]} tick={false} />
-                    <Radar name='점수' dataKey='score' stroke='#16a34a' fill='#16a34a' fillOpacity={0.3} />
-                  </RadarChart>
-                </ResponsiveContainer>
-              </div>
-
+              ))}
             </div>
           </div>
         )}
 
-        {/* 개선 방안 */}
-        {feedback && (
-          <div className='bg-white rounded-xl border border-gray-200 p-6 mb-8'>
-            <div className='flex items-center gap-2 mb-1'>
-              <Lightbulb className='size-4 text-yellow-500' />
-              <h2 className='text-base font-medium text-gray-900'>개선 방안</h2>
+        {/* 요약 카드 3개 */}
+        <div className='grid grid-cols-3 gap-4 mb-6'>
+          {[
+            {
+              label: '최고 키워드 순위',
+              value: bestKeyword ? `${bestKeyword.rankNo}위` : '—',
+              sub: bestKeyword ? bestKeyword.keyword : '순위 데이터 없음',
+              icon: <Search className='size-4 text-primary' />,
+            },
+            {
+              label: '추천 키워드',
+              value: `${keywords.length}개`,
+              sub: `기회 키워드 ${opportunityCount}개 포함`,
+              icon: <BarChart2 className='size-4 text-primary' />,
+            },
+            {
+              label: '월간 총 검색량',
+              value: totalSearchVolume.toLocaleString(),
+              sub: '추천 키워드 합산',
+              icon: <BarChart2 className='size-4 text-primary' />,
+            },
+          ].map((card) => (
+            <div key={card.label} className='bg-card border border-border rounded-lg p-5'>
+              <div className='flex items-center justify-between mb-3'>
+                <span className='text-sm font-medium text-muted-foreground'>{card.label}</span>
+                <div className='size-8 bg-accent rounded-lg flex items-center justify-center'>
+                  {card.icon}
+                </div>
+              </div>
+              <div className='text-2xl font-bold text-foreground mb-0.5'>{card.value}</div>
+              <div className='text-xs text-muted-foreground truncate'>{card.sub}</div>
             </div>
-            <p className='text-sm text-gray-400 mb-4'>{feedback.summary}</p>
-            <div className='space-y-3'>
+          ))}
+        </div>
+
+        {/* 개선 방안 */}
+        {feedback && allFeedbacks.length > 0 && (
+          <div className='bg-card border border-border rounded-lg p-6 mb-6'>
+            <div className='flex items-center gap-2 mb-1'>
+              <Lightbulb className='size-4' style={{ color: 'var(--chart-4)' }} />
+              <h2 className='text-sm font-bold text-foreground'>개선 방안</h2>
+            </div>
+            <p className='text-xs text-muted-foreground mb-4'>{feedback.summary}</p>
+            <div className='space-y-2.5'>
               {allFeedbacks.map((item, i) => (
-                <div
-                  key={i}
-                  className={`flex items-start gap-3 p-4 rounded-lg border ${feedbackStyle[item.type].bg}`}
-                >
-                  <AlertCircle className={`size-4 flex-shrink-0 mt-0.5 ${feedbackStyle[item.type].icon}`} />
-                  <p className='text-sm text-gray-700'>{item.msg}</p>
+                <div key={i} className='flex items-start gap-3 p-3.5 rounded-lg bg-background border border-border'>
+                  <span className={`text-xs px-1.5 py-0.5 rounded font-medium flex-shrink-0 mt-0.5 ${feedbackStyle[item.type].badge}`}>
+                    {feedbackStyle[item.type].label}
+                  </span>
+                  <p className='text-sm text-foreground leading-relaxed'>{item.msg}</p>
                 </div>
               ))}
             </div>
@@ -411,18 +244,18 @@ export function AnalysisResult() {
 
         {/* 방문자 키워드 요약 */}
         {feedback?.placeSummary && Object.keys(feedback.placeSummary).length > 0 && (
-          <div className='bg-white rounded-xl border border-gray-200 p-6'>
+          <div className='bg-card border border-border rounded-lg p-6 mb-6'>
             <div className='flex items-center gap-2 mb-4'>
-              <Users className='size-4 text-gray-500' />
-              <h2 className='text-base font-medium text-gray-900'>방문자 키워드 요약</h2>
+              <Users className='size-4 text-muted-foreground' />
+              <h2 className='text-sm font-bold text-foreground'>방문자 키워드 요약</h2>
             </div>
-            <div className='grid grid-cols-2 gap-4 sm:grid-cols-3'>
+            <div className='grid grid-cols-2 gap-3 sm:grid-cols-3'>
               {Object.entries(feedback.placeSummary).map(([category, kws]) => (
-                <div key={category} className='bg-gray-50 rounded-lg p-4'>
-                  <div className='text-xs font-medium text-gray-500 mb-2'>{category}</div>
+                <div key={category} className='bg-background border border-border rounded-lg p-4'>
+                  <div className='text-xs font-medium text-muted-foreground mb-2.5'>{category}</div>
                   <div className='flex flex-wrap gap-1.5'>
-                    {kws.map((kw) => (
-                      <span key={kw} className='text-xs px-2 py-1 bg-white border border-gray-200 rounded-full text-gray-700'>
+                    {(kws as string[]).map((kw) => (
+                      <span key={kw} className='text-xs px-2 py-1 rounded-full bg-card border border-border text-foreground'>
                         {kw}
                       </span>
                     ))}
@@ -432,6 +265,98 @@ export function AnalysisResult() {
             </div>
           </div>
         )}
+
+        {/* 추천 키워드 + 검색량 차트 */}
+        <div className='bg-card border border-border rounded-lg overflow-hidden mb-6'>
+          <div className='grid grid-cols-[2fr_1fr]'>
+
+            <div className='border-r border-border'>
+              {/* 컬럼 헤더 */}
+              <div className='flex items-center gap-3 px-6 py-3 border-b border-border bg-muted/50'>
+                <span className='w-5 text-xs font-medium text-muted-foreground text-center flex-shrink-0'>순위</span>
+                <span className='flex-1 text-xs font-medium text-muted-foreground'>키워드</span>
+                <span className='w-20 text-xs font-medium text-muted-foreground text-right flex-shrink-0'>월간 검색량</span>
+                <span className='w-20 text-xs font-medium text-muted-foreground text-center flex-shrink-0'>경쟁 강도</span>
+                <span className='w-14 text-xs font-medium text-muted-foreground text-center flex-shrink-0'>유효성</span>
+              </div>
+
+              <div className='space-y-0 px-3 py-2'>
+                {visibleKeywords.map((kw, index) => {
+                  const isTop = index < 10;
+                  return (
+                    <div
+                      key={index}
+                      className='flex items-center gap-3 px-3 py-2.5 rounded-lg hover:bg-muted transition-colors'
+                    >
+                      <span className={`w-5 text-xs text-center flex-shrink-0 ${isTop ? 'font-bold text-foreground' : 'font-medium text-muted-foreground'}`}>
+                        {index + 1}
+                      </span>
+                      <span className={`flex-1 text-sm truncate ${isTop ? 'font-bold text-foreground' : 'font-medium text-muted-foreground'}`}>
+                        {kw.keyword}
+                      </span>
+                      <span className={`w-20 text-xs text-right flex-shrink-0 ${isTop ? 'font-semibold text-foreground' : 'text-muted-foreground'}`}>
+                        {kw.monthlySearchVolume > 0 ? kw.monthlySearchVolume.toLocaleString() : '—'}
+                      </span>
+                      <div className='w-20 flex justify-center flex-shrink-0'>
+                        <span className={`text-xs px-2 py-0.5 rounded-md font-medium text-center ${competitionStyle[kw.competitionLevel] ?? ''}`}>
+                          {kw.competitionLevel}
+                        </span>
+                      </div>
+                      <div className='w-14 flex justify-center flex-shrink-0'>
+                        {kw.isOpportunity
+                          ? <span className='text-xs px-1.5 py-0.5 rounded-md font-medium bg-accent text-accent-foreground'>유효</span>
+                          : <span className='text-xs text-muted-foreground'>—</span>
+                        }
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+
+              {hasMore && (
+                <div className='px-6 pb-4'>
+                  <button
+                    onClick={() => setShowAllKeywords((v) => !v)}
+                    className='w-full flex items-center justify-center gap-1.5 py-2 text-xs rounded-lg text-muted-foreground hover:bg-muted transition-colors'
+                  >
+                    <ChevronDown className='size-3.5' />
+                    10개 더 보기
+                  </button>
+                </div>
+              )}
+            </div>
+
+            <div className='p-6'>
+              <h2 className='text-sm font-bold text-foreground mb-4'>검색량 비교</h2>
+              <ResponsiveContainer width='100%' height={280}>
+                <BarChart data={chartData} layout='vertical' margin={{ left: 0, right: 16, top: 4, bottom: 4 }}>
+                  <CartesianGrid strokeDasharray='3 3' horizontal={false} stroke='var(--border)' />
+                  <XAxis
+                    type='number'
+                    tick={{ fontSize: 10, fill: 'var(--muted-foreground)' }}
+                    axisLine={false}
+                    tickLine={false}
+                    tickFormatter={(v) => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)}
+                  />
+                  <YAxis
+                    type='category'
+                    dataKey='keyword'
+                    tick={{ fontSize: 11, fill: 'var(--muted-foreground)' }}
+                    axisLine={false}
+                    tickLine={false}
+                    width={64}
+                  />
+                  <Tooltip content={<CustomTooltip />} cursor={{ fill: 'var(--muted)' }} />
+                  <Bar dataKey='검색량' radius={[0, 4, 4, 0]} maxBarSize={18}>
+                    {chartData.map((_, i) => (
+                      <Cell key={i} fill={i === 0 ? 'var(--chart-1)' : i < 3 ? 'var(--chart-2)' : 'var(--chart-3)'} />
+                    ))}
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        </div>
 
       </div>
     </div>
