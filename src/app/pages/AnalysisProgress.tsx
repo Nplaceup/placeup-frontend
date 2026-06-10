@@ -213,7 +213,7 @@ export function AnalysisProgress() {
           {!error && (
             <div className='bg-blue-50 rounded-lg p-4 border border-blue-200'>
               <p className='text-sm text-blue-800 text-center'>
-                분석이 완료되면 자동으로 결과 페이지로 이동합니다
+                분석 시간은 2분 이상 소요되며, 분석이 완료되면 자동으로 결과 페이지로 이동합니다
               </p>
             </div>
           )}
