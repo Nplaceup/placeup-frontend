@@ -65,10 +65,20 @@ src/
 └── main.tsx
 ```
 ## Pages
-<img width="2543" height="1180" alt="image" src="https://github.com/user-attachments/assets/757673c3-92bf-4707-8023-1ea24f26845f" />
-<img width="2267" height="1416" alt="image" src="https://github.com/user-attachments/assets/807f24e9-8d65-40eb-b137-16c5bb270d5c" />
-<img width="2249" height="845" alt="image" src="https://github.com/user-attachments/assets/1d413df1-7662-4469-b322-9e1434c26741" />
-<img width="2108" height="1322" alt="image" src="https://github.com/user-attachments/assets/35f50930-f30f-40bc-9bb5-56dbd6d4676a" />
+1. 대쉬보드 페이지 - Dashboard
+<img width="2780" height="1034" alt="image" src="https://github.com/user-attachments/assets/2b7c069f-9dd7-4626-9bca-46967f2d4670" />
+<img width="2829" height="1185" alt="image" src="https://github.com/user-attachments/assets/fcf8f14f-4e26-4225-a370-549689331a1c" />
+<img width="2838" height="1327" alt="image" src="https://github.com/user-attachments/assets/c9fcbddc-963d-49fc-bae2-b3a332fcf996" />
+
+2. 분석 진행 페이지 - AnalysisProgress
+<img width="2781" height="1377" alt="image" src="https://github.com/user-attachments/assets/ba4c7b74-a70c-47d3-b11e-3a00dc414962" />
+<img width="2804" height="1366" alt="image" src="https://github.com/user-attachments/assets/6ab81597-cdb1-4972-b739-dfda305d02a1" />
+
+3. 분석 결과 페이지 - AnalysisResult
+<img width="2078" height="947" alt="image" src="https://github.com/user-attachments/assets/ba8f5113-98e3-4348-b3f2-351257b4e3e2" />
+<img width="2045" height="1372" alt="image" src="https://github.com/user-attachments/assets/f2c24f5b-8cc4-4f2e-a462-f540197a030b" />
+<img width="2044" height="1107" alt="image" src="https://github.com/user-attachments/assets/935a143f-779e-4158-9c6d-5c115cb91d7f" />
+<img width="2049" height="853" alt="image" src="https://github.com/user-attachments/assets/ccfd3925-403c-4f6a-b947-6e12826fd10b" />
 
 
 ## API
