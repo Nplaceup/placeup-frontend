@@ -1,6 +1,7 @@
 # PlaceUp
 
 네이버 플레이스 URL을 입력하면 키워드 추천, 플레이스 점수, 개선 방안을 제공하는 SEO 분석 웹 서비스입니다.
+
 https://placeup-frontend.pages.dev
 
 ## Branch
