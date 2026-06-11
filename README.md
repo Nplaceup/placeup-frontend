@@ -64,6 +64,12 @@ src/
 │   └── fonts.css
 └── main.tsx
 ```
+##Pages
+<img width="2543" height="1180" alt="image" src="https://github.com/user-attachments/assets/757673c3-92bf-4707-8023-1ea24f26845f" />
+<img width="2267" height="1416" alt="image" src="https://github.com/user-attachments/assets/807f24e9-8d65-40eb-b137-16c5bb270d5c" />
+<img width="2249" height="845" alt="image" src="https://github.com/user-attachments/assets/1d413df1-7662-4469-b322-9e1434c26741" />
+<img width="2108" height="1322" alt="image" src="https://github.com/user-attachments/assets/35f50930-f30f-40bc-9bb5-56dbd6d4676a" />
+
 
 ## API
 
